@@ -1,5 +1,9 @@
+from math import isfinite
+
 class BinarySearch:
     def __init__(self, binary_search_priority_for_smallest_values = True, previous_value_should_be_the_basis_of_binary_search_calculations = False, previous_value_is_the_target = False, change_behavior_mid_step = False, number_of_attempts = 20):
+        
+        #functions
         self.greater_than_function = lambda x, r, tolerance: round((1/(2*tolerance))*(abs(x-r)-abs(x-r-tolerance)+tolerance))
         self.equals_function = lambda x, r, tolerance: round((1/(2*tolerance))*(abs(x-r+tolerance)-abs(x-r)+tolerance)*((-1/(2*tolerance))*(abs(x-r)-abs(x-r-tolerance)+tolerance)+1))
         self.average_function = lambda a, b: (a+b)/2
@@ -7,7 +11,11 @@ class BinarySearch:
         self.greatest_function = lambda average2, initial_upper, result2, expected_result, tolerance: self.equals_function(average2, initial_upper, tolerance) * self.greater_than_function(expected_result, result2, tolerance)
         self.rational_function = lambda a : a/(a+1)
         self.arithmetic_progression_function = lambda a1, n, r: a1+ n*r
+        #self.selector_without_graduation_and_without_inclusion = lambda x, a, b, d, m: (a -m)*(ceil((1/2)*(abs(x-b)-abs(x-b-1)+1))) +m +d
+        self.selector_without_graduation_and_with_inclusion = lambda x, a, b, d, m: (a -m)*(floor((1/2)*(abs(x-b+1)-abs(x-b)+1))) +m +d
+        self.equals_with_no_graduation = lambda x, b, d: d*(-ceil((1/2)*(abs(x-b)-abs(x-b-1)+1))+1)*floor((1/2)*(abs(x-b+1)-abs(x-b)+1))
         
+        #values
         self.binary_search_priority_for_smallest_values = binary_search_priority_for_smallest_values
         self.previous_value_should_be_the_basis_of_binary_search_calculations = previous_value_should_be_the_basis_of_binary_search_calculations
         self.previous_value_is_the_target = previous_value_is_the_target
@@ -45,51 +53,172 @@ class BinarySearch:
 
         return int(average1), is_global_maximum, is_global_minimum
     
-    def search_for_function (self, y, function, tolerance = 0.001):
-        
-        lower_value1 = float("-inf")
-        upper_value1 = float("inf")
-        average1 = self.greater_than_function(y,0,tolerance) -self.greater_than_function(0,y,tolerance)
-        result1 = function(average1)
-
-        if self.greater_than_function(y, result1, tolerance):
-            while self.greater_than_function(y, result1, tolerance):
-                average1 *= 2
-                result1 = function(average1)
-            upper_value1 = average1
-            lower_value1 = average1 /2
-        else:
-            while self.greater_than_function(result1, y, tolerance):
-                average1 /= 2
-                result1 = function(average1)
-            lower_value1 = average1
-            upper_value1 = average1 * 2
-        
-        continue_execution = self.greater_than_function(upper_value1, lower_value1, tolerance)
-        value_not_found = self.greater_than_function (abs(y-average1), tolerance, tolerance)
-        
-        while value_not_found and continue_execution:
-            lower_value2 = average1 * self.greater_than_function(y,result1, tolerance) + lower_value1*self.greater_than_function(result1, y, tolerance)
-            upper_value2 = upper_value1 * self.greater_than_function(y,result1, tolerance) + average1*self.greater_than_function(result1, y, tolerance)
-            average2 = self.average_function(lower_value2, upper_value2) +average1*self.equals_function(y, result1, tolerance)
-            result2 = function(average2)
-            lower_value1 = lower_value2
-            upper_value1 = upper_value2
-            average1 = average2
-            result1 = result2
-            continue_execution = self.greater_than_function(upper_value2, lower_value2, tolerance)
-            value_not_found = self.greater_than_function (abs(y-average1), tolerance, tolerance)
-
-        return average2
-
+    #def search_for_function (y, function, tolerance = 0.001):
+    #    greater_than_function = lambda x, r, tolerance: round((1/(2*tolerance))*(abs(x-r)-abs(x-r-tolerance)+tolerance))
+    #    equals_function = lambda x, r, tolerance: round((1/(2*tolerance))*(abs(x-r+tolerance)-abs(x-r)+tolerance)*((-1/(2*tolerance))*(abs(x-r)-abs(x-r-tolerance)+tolerance)+1))
+    #    average_function = lambda a, b: (a+b)/2
+    #    
+    #    lower_value1 = float("-inf")
+    #    upper_value1 = float("inf")
+    #    result_with_zero_parameter = function(0)
+    #    average1 = greater_than_function(y,result_with_zero_parameter,tolerance) -greater_than_function(result_with_zero_parameter,y,tolerance)
+    #    result1 = function(average1)
+    #    is_less = False
+    #    
+    #    if greater_than_function(y, result_with_zero_parameter, tolerance):
+    #        while greater_than_function(abs(y), abs(result1), tolerance) and greater_than_function(abs(result_with_zero_parameter), abs(result1), tolerance): # and result1 > 0:
+    #            average1 *= 2
+    #            result1 = function(average1)
+    #        
+    #        upper_value1 = average1
+    #        
+    #        if not greater_than_function(result1,0,tolerance):
+    #            is_less = True
+    #            
+    #        average2 = greater_than_function(result1,0,tolerance) -greater_than_function(0,result1,tolerance)
+    #        result2 = function(average2)
+    #        
+    #        while greater_than_function(abs(result2), abs(y), tolerance) and greater_than_function(abs(result2), abs(result_with_zero_parameter), tolerance):
+    #            average2 /= 2
+    #            result2 = function(average2)
+    #        lower_value1 = average2
+    #    else:
+    #        #is_less = True
+    #        while greater_than_function(abs(result1), abs(y), tolerance) and greater_than_function(abs(result1), abs(result_with_zero_parameter), tolerance):
+    #            average1 /= 2
+    #            result1 = function(average1)
+    #        lower_value1 = average1
+    #        
+    #        if not greater_than_function(result1,0,tolerance):
+    #            is_less = True
+    #        
+    #        average2 = greater_than_function(result1,0,tolerance) -greater_than_function(0,result1,tolerance)
+    #        result2 = function(average2)
+    #        
+    #        while greater_than_function(abs(y), abs(result1), tolerance) and greater_than_function(abs(result_with_zero_parameter), abs(result2), tolerance): # and result1 > 0:
+    #            average2 *= 2
+    #            result2 = function(average2)
+    #        upper_value1 = average2
+    #        
+    #    continue_execution = greater_than_function(upper_value1, lower_value1, tolerance)
+    #    value_not_found = greater_than_function (abs(y-average1), tolerance, tolerance)
+    #    average1 = average_function(lower_value1, upper_value1) +average1*equals_function(y, result1, tolerance)
+    #    result1 = function(average1)
+    #    while value_not_found and continue_execution:
+    #        if not is_less:
+    #            lower_value2 = average1 * greater_than_function(y,result1, tolerance) + lower_value1*greater_than_function(result1, y, tolerance)
+    #            upper_value2 = upper_value1 * greater_than_function(y,result1, tolerance) + average1*greater_than_function(result1, y, tolerance)
+    #        else:
+    #            lower_value2 =  lower_value1 * greater_than_function(y,result1, tolerance) + average1*greater_than_function(result1, y, tolerance)
+    #            upper_value2 = average1 * greater_than_function(y,result1, tolerance) + upper_value1*greater_than_function(result1, y, tolerance)
+    #        average2 = average_function(lower_value2, upper_value2) +average1*equals_function(y, result1, tolerance)
+    #        result2 = function(average2)
+    #        lower_value1 = lower_value2
+    #        upper_value1 = upper_value2
+    #        average1 = average2
+    #        result1 = result2
+    #        continue_execution = greater_than_function(upper_value2, lower_value2, tolerance)
+    #        value_not_found = greater_than_function (abs(y-result1), tolerance, tolerance)
+    #    return average2
     
-    def search_by_step (self, steps, minimum_limit, maximum_limit, previous_value = 0):
-        
-        if steps < minimum_limit:
-            steps = 0
-        elif steps > maximum_limit:
-            steps = self.number_of_attempts
+    def search_for_function(y, function, tolerance=1e-6, max_iter=1000):
+    """
+    Busca binária otimizada para encontrar x tal que function(x) ≈ y.
 
+    - Detecta se a função é crescente ou decrescente.
+    - Expande o intervalo na direção correta.
+    - Minimiza |f(x)-y| sem depender de mudança de sinal.
+
+    Parâmetros:
+        y (float): valor alvo
+        function (callable): função f(x)
+        tolerance (float): precisão desejada
+        max_iter (int): máximo de iterações
+
+    Retorna:
+        float: valor de x tal que f(x) ≈ y
+    """
+    # --- 1. Ponto inicial ---
+    x0 = 0.0
+    try:
+        f0 = function(x0)
+    except ValueError:
+        raise ValueError("A função não está definida em x=0")
+
+    if abs(f0 - y) < tolerance:
+        return x0
+
+    # --- 2. Detectar monotonicidade ---
+    test_step = 1e-3
+    try:
+        f_test = function(x0 + test_step)
+        is_increasing = f_test > f0
+    except ValueError:
+        # Se não dá para calcular, assume decrescente
+        is_increasing = False
+
+    # --- 3. Expandir intervalo na direção correta ---
+    step = 1.0
+    x_best, f_best = x0, f0
+
+    for _ in range(50):  # limite de expansões
+        x1 = x0 + step if (y > f0) == is_increasing else x0 - step
+        try:
+            f1 = function(x1)
+        except ValueError:
+            break  # atingiu limite do domínio
+        if not isfinite(f1):
+            break
+        # Se encontrou valor mais próximo, atualiza melhor estimativa
+        if abs(f1 - y) < abs(f_best - y):
+            x_best, f_best = x1, f1
+        # Se já está suficientemente próximo, encerra
+        if abs(f1 - y) < tolerance:
+            return x1
+        # Expande
+        x0, f0 = x1, f1
+        step *= 2
+
+    # Define intervalo [a,b] em torno do melhor valor encontrado
+    a, b = x_best - abs(step), x_best + abs(step)
+
+    # --- 4. Busca binária refinada ---
+    for _ in range(max_iter):
+        mid = (a + b) / 2
+        try:
+            fmid = function(mid)
+        except ValueError:
+            # Se a função não é definida, encolhe intervalo
+            b = mid if mid > a else a
+            continue
+
+        if not isfinite(fmid):
+            b = mid
+            continue
+
+        # Atualiza melhor estimativa
+        if abs(fmid - y) < abs(f_best - y):
+            x_best, f_best = mid, fmid
+
+        if abs(fmid - y) < tolerance:
+            return mid
+
+        # Direção da busca binária
+        if (fmid < y) == is_increasing:
+            a = mid
+        else:
+            b = mid
+
+    return x_best
+
+    def search_for_function_step (self, y, function, lower_value, upper_value, average, result):
+        average2 = self.average_function(lower_value, upper_value) +average*self.equals_with_no_graduation(y,result,1)
+        result2 = function(average2)
+        lower_value2 = average * self.selector_without_graduation_and_with_inclusion(y,1,result,0,0) + lower_value * self.selector_without_graduation_and_with_inclusion(result, 1, y, 0, 0)
+        upper_value2 = upper_value * self.selector_without_graduation_and_with_inclusion(y,1,result,0,0) + average*self.selector_without_graduation_and_with_inclusion(result, 1, y, 0, 0)
+        return lower_value2, upper_value2, average2, result2
+    
+    def binary_search_by_step (self, steps, minimum_limit, maximum_limit, previous_value = 0):
         if not self.previous_value_should_be_the_basis_of_binary_search_calculations:
             if self.binary_search_priority_for_smallest_values:
                 return minimum_limit +(maximum_limit -minimum_limit) * self.rational_function(steps)
@@ -128,12 +257,6 @@ class BinarySearch:
                         return previous_value +(maximum_limit -previous_value) * self.rational_function(steps % (self.number_of_attempts//2 +1))
     
     def linear_search_step(self, steps, minimum_limit, maximum_limit, previous_value = 0):
-        if steps < minimum_limit:
-            steps = 0
-        elif steps > maximum_limit:
-            steps = self.number_of_attempts
-            
-        
         if not self.previous_value_should_be_the_basis_of_binary_search_calculations:
             if self.binary_search_priority_for_smallest_values:
                 return self.arithmetic_progression_function(minimum_limit, steps, (maximum_limit-minimum_limit)/self.number_of_attempts)
@@ -161,37 +284,3 @@ class BinarySearch:
         if self.binary_search_priority_modified:
             self.binary_search_priority_modified = False
             self.binary_search_priority_for_smallest_values = not self.binary_search_priority_for_smallest_values
-
-    
-#bs = BinarySearch()
-#print("\n\n-------- SEARCH BY STEP --------\n\n")
-# for i in range(2**4):
-#     bs.binary_search_priority_for_smallest_values = True if 2**3 & i else False
-#     bs.previous_value_should_be_the_basis_of_binary_search_calculations = True if 2**2 & i else False 
-#     bs.previous_value_is_the_target = True if 2**1 & i else False
-#     bs.change_behavior_mid_step = True if 2**0 & i else False
-#     print(f"""
-#     binary_search_priority_for_smallest_values: {bs.binary_search_priority_for_smallest_values}.
-#     previous_value_should_be_the_basis_of_binary_search_calculations: {bs.previous_value_should_be_the_basis_of_binary_search_calculations}.
-#     previous_value_is_the_target: {bs.previous_value_is_the_target}.
-#     change_behavior_mid_step: {bs.change_behavior_mid_step}.
-#     """)
-#     for j in range(0,21):
-#         print(f"j: {j} result: {bs.search_by_step(j, 1, 20, 10)}.")
-#     bs.reset()
-
-# print("\n\n-------- LINEAR SEARCH STEP --------\n\n")
-# for i in range(2**4):
-#     bs.binary_search_priority_for_smallest_values = True if 2**3 & i else False
-#     bs.previous_value_should_be_the_basis_of_binary_search_calculations = True if 2**2 & i else False 
-#     bs.previous_value_is_the_target = True if 2**1 & i else False
-#     bs.change_behavior_mid_step = True if 2**0 & i else False
-#     print(f"""
-#     binary_search_priority_for_smallest_values: {bs.binary_search_priority_for_smallest_values}.
-#     previous_value_should_be_the_basis_of_binary_search_calculations: {bs.previous_value_should_be_the_basis_of_binary_search_calculations}.
-#     previous_value_is_the_target: {bs.previous_value_is_the_target}.
-#     change_behavior_mid_step: {bs.change_behavior_mid_step}.
-#     """)
-#     for j in range(0,21):
-#         print(f"j: {j} result: {bs.linear_search_step(j, 1, 20, 10)}.")
-#     bs.reset()
