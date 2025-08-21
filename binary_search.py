@@ -122,94 +122,94 @@ class BinarySearch:
     #    return average2
     
     def search_for_function(y, function, tolerance=1e-6, max_iter=1000):
-    """
-    Busca binária otimizada para encontrar x tal que function(x) ≈ y.
+        """
+        Busca binária otimizada para encontrar x tal que function(x) ≈ y.
 
-    - Detecta se a função é crescente ou decrescente.
-    - Expande o intervalo na direção correta.
-    - Minimiza |f(x)-y| sem depender de mudança de sinal.
+        - Detecta se a função é crescente ou decrescente.
+        - Expande o intervalo na direção correta.
+        - Minimiza |f(x)-y| sem depender de mudança de sinal.
 
-    Parâmetros:
-        y (float): valor alvo
-        function (callable): função f(x)
-        tolerance (float): precisão desejada
-        max_iter (int): máximo de iterações
+        Parâmetros:
+            y (float): valor alvo
+            function (callable): função f(x)
+            tolerance (float): precisão desejada
+            max_iter (int): máximo de iterações
 
-    Retorna:
-        float: valor de x tal que f(x) ≈ y
-    """
-    # --- 1. Ponto inicial ---
-    x0 = 0.0
-    try:
-        f0 = function(x0)
-    except ValueError:
-        raise ValueError("A função não está definida em x=0")
-
-    if abs(f0 - y) < tolerance:
-        return x0
-
-    # --- 2. Detectar monotonicidade ---
-    test_step = 1e-3
-    try:
-        f_test = function(x0 + test_step)
-        is_increasing = f_test > f0
-    except ValueError:
-        # Se não dá para calcular, assume decrescente
-        is_increasing = False
-
-    # --- 3. Expandir intervalo na direção correta ---
-    step = 1.0
-    x_best, f_best = x0, f0
-
-    for _ in range(50):  # limite de expansões
-        x1 = x0 + step if (y > f0) == is_increasing else x0 - step
+        Retorna:
+            float: valor de x tal que f(x) ≈ y
+        """
+        # --- 1. Ponto inicial ---
+        x0 = 0.0
         try:
-            f1 = function(x1)
+            f0 = function(x0)
         except ValueError:
-            break  # atingiu limite do domínio
-        if not isfinite(f1):
-            break
-        # Se encontrou valor mais próximo, atualiza melhor estimativa
-        if abs(f1 - y) < abs(f_best - y):
-            x_best, f_best = x1, f1
-        # Se já está suficientemente próximo, encerra
-        if abs(f1 - y) < tolerance:
-            return x1
-        # Expande
-        x0, f0 = x1, f1
-        step *= 2
+            raise ValueError("A função não está definida em x=0")
 
-    # Define intervalo [a,b] em torno do melhor valor encontrado
-    a, b = x_best - abs(step), x_best + abs(step)
+        if abs(f0 - y) < tolerance:
+            return x0
 
-    # --- 4. Busca binária refinada ---
-    for _ in range(max_iter):
-        mid = (a + b) / 2
+        # --- 2. Detectar monotonicidade ---
+        test_step = 1e-3
         try:
-            fmid = function(mid)
+            f_test = function(x0 + test_step)
+            is_increasing = f_test > f0
         except ValueError:
-            # Se a função não é definida, encolhe intervalo
-            b = mid if mid > a else a
-            continue
+            # Se não dá para calcular, assume decrescente
+            is_increasing = False
 
-        if not isfinite(fmid):
-            b = mid
-            continue
+        # --- 3. Expandir intervalo na direção correta ---
+        step = 1.0
+        x_best, f_best = x0, f0
 
-        # Atualiza melhor estimativa
-        if abs(fmid - y) < abs(f_best - y):
-            x_best, f_best = mid, fmid
+        for _ in range(50):  # limite de expansões
+            x1 = x0 + step if (y > f0) == is_increasing else x0 - step
+            try:
+                f1 = function(x1)
+            except ValueError:
+                break  # atingiu limite do domínio
+            if not isfinite(f1):
+                break
+            # Se encontrou valor mais próximo, atualiza melhor estimativa
+            if abs(f1 - y) < abs(f_best - y):
+                x_best, f_best = x1, f1
+            # Se já está suficientemente próximo, encerra
+            if abs(f1 - y) < tolerance:
+                return x1
+            # Expande
+            x0, f0 = x1, f1
+            step *= 2
 
-        if abs(fmid - y) < tolerance:
-            return mid
+        # Define intervalo [a,b] em torno do melhor valor encontrado
+        a, b = x_best - abs(step), x_best + abs(step)
 
-        # Direção da busca binária
-        if (fmid < y) == is_increasing:
-            a = mid
-        else:
-            b = mid
+        # --- 4. Busca binária refinada ---
+        for _ in range(max_iter):
+            mid = (a + b) / 2
+            try:
+                fmid = function(mid)
+            except ValueError:
+                # Se a função não é definida, encolhe intervalo
+                b = mid if mid > a else a
+                continue
 
-    return x_best
+            if not isfinite(fmid):
+                b = mid
+                continue
+
+            # Atualiza melhor estimativa
+            if abs(fmid - y) < abs(f_best - y):
+                x_best, f_best = mid, fmid
+
+            if abs(fmid - y) < tolerance:
+                return mid
+
+            # Direção da busca binária
+            if (fmid < y) == is_increasing:
+                a = mid
+            else:
+                b = mid
+
+        return x_best
 
     def search_for_function_step (self, y, function, lower_value, upper_value, average, result):
         average2 = self.average_function(lower_value, upper_value) +average*self.equals_with_no_graduation(y,result,1)
@@ -279,6 +279,62 @@ class BinarySearch:
                 else:
                     # vai do previous_value para o maior valor definido pelo maximum_limit
                     return self.arithmetic_progression_function(previous_value, steps if not self.change_behavior_mid_step else 2*(steps % (self.number_of_attempts//2 +1)), (maximum_limit-previous_value)/self.number_of_attempts)
+    
+    def binary_search_to_find_miniterm_from_dict (self, wanted_number, array_dict):
+        determine_the_most_approximate_value = False # booleano que indica se deve acontecer o deslocamento em um determinado index
+        array_dict_length = len(array_dict)-1 # Seria o tamanho ou o comprimento da lista, ou seja, quantos elementos tem a lista.
+        factor_binary_search = (array_dict_length)//2 if array_dict_length % 2 != 0 else (array_dict_length+1)//2
+        factor_is_zero = False # Verifica se a variável factor_binary_search tem valor zero
+        first_iteration = True # Indica a primeira iteração do algoritmo.
+        index_middle = array_dict_length # Seria uma variável que aponta para o meio entre o intervalo dos limites superior e inferior da lista através do valor da média entre o limite superior com o inferior. Seria a mesma coisa que mk.
+        index_middle_result = index_middle # Guarda o valor da média (que aponta para o índice entre o limite inferior do intervalo com o limite superior do intervalo) com um número natural.
+        lower_limit = 0 # Trata-se do limite inferior do intervalo. Seria equivalente a lk.
+        average = lambda a, b: (a+b)/2 # função que calcula a média entre dois valores. Seria equivalente a mk+1
+        upper_limit = array_dict_length # Limite superior do intervalo. Seria equivalente a uk.
+        array_list = list(array_dict.values()) # array_list contém os resultados das operações da tabela verdade.
+        
+        while not determine_the_most_approximate_value:
+
+            if wanted_number == array_list[index_middle]:
+                determine_the_most_approximate_value = True
+                                                            
+            elif wanted_number > array_list[index_middle]: # Se o número à esquerda for maior que o número da busca binária:
+                if index_middle < array_dict_length: # Se o número verificado à direita não tiver o mesmo índice referente ao maior índice do vetor aberto (overflow):
+                    
+                    lower_limit = index_middle_result
+                    index_middle_result = average(lower_limit, upper_limit)
+                    index_middle = int(index_middle_result)                
+                    
+                else: # Do contrário, se os índices forem iguais, então devemos fazer a inserção à direita do número encontrado
+                    determine_the_most_approximate_value = True                
+            else:
+                if not first_iteration:
+                    upper_limit = index_middle_result
+                else:
+                    first_iteration = False
+                    
+                index_middle_result = average(lower_limit, upper_limit)
+                index_middle = int(index_middle_result)
+            
+            if factor_is_zero:
+                determine_the_most_approximate_value = True
+            
+            if not determine_the_most_approximate_value and not factor_is_zero:
+                factor_binary_search = factor_binary_search / 2
+                if int(factor_binary_search) == 0:
+                    factor_is_zero = True
+        
+        if index_middle > 0: # Se a distância entre o valor do índice encontrado for maior que o valor do índice anterior, então desejamos aquele valor com a menor distância ou com a menor diferença com o valor desejado.
+            if abs(wanted_number -array_list[index_middle]) > abs(wanted_number - array_list[index_middle-1]):
+                index_middle -= 1
+                
+        groups = dict()
+        for key, value in array_dict.items():
+            groups[value] = key # Valor é o resultado das operações, e key seria o índice desses resultados.
+        
+        #print(f"groups: {groups}")
+        
+        return array_list[index_middle], groups[array_list[index_middle]]
     
     def reset(self):
         if self.binary_search_priority_modified:
