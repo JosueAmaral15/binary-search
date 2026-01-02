@@ -7,8 +7,8 @@ class BinarySearch:
         self.greater_than_function = lambda x, r, tolerance: round((1/(2*tolerance))*(abs(x-r)-abs(x-r-tolerance)+tolerance))
         self.equals_function = lambda x, r, tolerance: round((1/(2*tolerance))*(abs(x-r+tolerance)-abs(x-r)+tolerance)*((-1/(2*tolerance))*(abs(x-r)-abs(x-r-tolerance)+tolerance)+1))
         self.average_function = lambda a, b: (a+b)/2
-        self.lowest_function = lambda average2, initial_lower, result2, expected_result, tolerance: self.equals_function(average2, initial_lower, tolerance) * self.greater_than_function(result2, expected_result, tolerance)
-        self.greatest_function = lambda average2, initial_upper, result2, expected_result, tolerance: self.equals_function(average2, initial_upper, tolerance) * self.greater_than_function(expected_result, result2, tolerance)
+        self.lowest_function = lambda average, initial_lower, result, expected_result, tolerance: self.equals_function(average, initial_lower, tolerance) * self.greater_than_function(result, expected_result, tolerance)
+        self.greatest_function = lambda average, initial_upper, result, expected_result, tolerance: self.equals_function(average, initial_upper, tolerance) * self.greater_than_function(expected_result, result, tolerance)
         self.rational_function = lambda a : a/(a+1)
         self.arithmetic_progression_function = lambda a1, n, r: a1+ n*r
         #self.selector_without_graduation_and_without_inclusion = lambda x, a, b, d, m: (a -m)*(ceil((1/2)*(abs(x-b)-abs(x-b-1)+1))) +m +d
@@ -41,11 +41,11 @@ class BinarySearch:
             lower_value2 = average1 * self.greater_than_function(expected_result,result1, tolerance) + lower_value1*self.greater_than_function(result1, expected_result, tolerance)
             upper_value2 = upper_value1 * self.greater_than_function(expected_result,result1, tolerance) + average1*self.greater_than_function(result1, expected_result, tolerance)
             average2 = self.average_function(lower_value2, upper_value2) +average1*self.equals_function(expected_result, result1, tolerance)
-            lower_value1 = lower_value2
-            upper_value1 = upper_value2
             average1 = average2
             average2 = int(average2)
             result2 = array[average2]
+            lower_value1 = lower_value2
+            upper_value1 = upper_value2
             result1 = result2
             continue_execution = self.greater_than_function(upper_value2, lower_value2 +1, tolerance)
             is_global_maximum = self.greatest_function (average2, initial_upper, result2, expected_result,tolerance)
