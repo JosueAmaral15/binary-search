@@ -1,4 +1,220 @@
 from math import isfinite
+import numpy as np
+from typing import Callable, Dict, List
+
+class BinaryRateOptimizer:
+    """
+    Gradient Descent Optimizer with Binary Search Learning Rate (BR-GD).
+    
+    Instead of a fixed Learning Rate, this optimizer performs a dynamic 
+    Line Search at every step to find the optimal step size that minimizes 
+    the cost function along the gradient direction.
+    """
+
+    def __init__(self, 
+                 max_iter: int = 100, 
+                 tol: float = 1e-6, 
+                 expansion_factor: float = 2.0,
+                 binary_search_steps: int = 10):
+        """
+        Initializes the optimizer.
+
+        Args:
+            max_iter (int): Maximum number of gradient descent iterations.
+            tol (float): Tolerance threshold for convergence (stop if cost change is minimal).
+            expansion_factor (float): Multiplier used during the alpha expansion phase.
+            binary_search_steps (int): Number of binary subdivisions to refine alpha.
+        """
+        self.max_iter = max_iter
+        self.tol = tol
+        self.expansion_factor = expansion_factor
+        self.binary_search_steps = binary_search_steps
+        
+        # History for plotting/debugging purposes
+        self.history: Dict[str, List[float]] = {
+            "theta": [],
+            "cost": [],
+            "alpha": []
+        }
+
+    def _get_loss_at_step(self, 
+                          alpha: float, 
+                          current_theta: np.ndarray, 
+                          gradient: np.ndarray, 
+                          X: np.ndarray, 
+                          y: np.ndarray, 
+                          cost_func: Callable) -> float:
+        """Helper to calculate the projected cost if we take a step of size 'alpha'."""
+        theta_temp = current_theta - alpha * gradient
+        return cost_func(theta_temp, X, y)
+
+    def _find_optimal_learning_rate(self, 
+                                    current_theta: np.ndarray, 
+                                    gradient: np.ndarray, 
+                                    X: np.ndarray, 
+                                    y: np.ndarray, 
+                                    cost_func: Callable) -> float:
+        """
+        Executes the BR-GD strategy: Expansion + Binary Search.
+        
+        Returns:
+            float: The optimized learning rate (alpha) for the current step.
+        """
+        # Current cost (equivalent to alpha = 0)
+        base_loss = cost_func(current_theta, X, y)
+        
+        # --- PHASE 1: Expansion (Find the interval [0, alpha_high]) ---
+        alpha_low = 0.0
+        alpha_high = 1e-4  # Conservative start
+        
+        best_alpha = 0.0
+        best_loss = base_loss
+        
+        # Attempt to expand alpha until the error worsens (overshooting the valley)
+        expanded = False
+        for _ in range(20): # Limit expansion attempts
+            loss_new = self._get_loss_at_step(alpha_high, current_theta, gradient, X, y, cost_func)
+            
+            if loss_new < best_loss:
+                # We are still descending, keep expanding
+                best_loss = loss_new
+                best_alpha = alpha_high
+                alpha_low = alpha_high
+                alpha_high *= self.expansion_factor
+            else:
+                # Error increased, we passed the minimum
+                expanded = True
+                break
+        
+        if not expanded:
+            # If we expanded 20 times and error kept dropping, return the largest found.
+            return alpha_high
+
+        # --- PHASE 2: Binary Refinement ---
+        # We know the optimal alpha is within [alpha_low, alpha_high]
+        
+        for _ in range(self.binary_search_steps):
+            alpha_mid = (alpha_low + alpha_high) / 2
+            loss_mid = self._get_loss_at_step(alpha_mid, current_theta, gradient, X, y, cost_func)
+            
+            if loss_mid < best_loss:
+                best_loss = loss_mid
+                best_alpha = alpha_mid
+            
+            # Local slope test to decide which side to cut (Pseudo-Gradient on Alpha)
+            # Check a point slightly to the right
+            loss_right = self._get_loss_at_step(alpha_mid * 1.05, current_theta, gradient, X, y, cost_func)
+            
+            if loss_right < loss_mid:
+                # The valley is further to the right
+                alpha_low = alpha_mid
+            else:
+                # The valley is to the left (or we passed it)
+                alpha_high = alpha_mid
+                
+        return best_alpha
+
+    def optimize(self, 
+                 X: np.ndarray, 
+                 y: np.ndarray, 
+                 initial_theta: np.ndarray, 
+                 cost_func: Callable, 
+                 grad_func: Callable) -> np.ndarray:
+        """
+        Executes the main optimization loop.
+
+        Returns:
+            np.ndarray: The final optimized parameters (theta).
+        """
+        theta = initial_theta.copy()
+        
+        # Save initial state
+        initial_cost = cost_func(theta, X, y)
+        self.history["theta"].append(theta.copy())
+        self.history["cost"].append(initial_cost)
+        self.history["alpha"].append(0.0)
+
+        print(f"--- Starting BR-GD Optimization ---")
+        print(f"Initial Cost: {initial_cost:.6f}")
+
+        for i in range(self.max_iter):
+            # 1. Calculate Gradient
+            grad = grad_func(theta, X, y)
+            
+            # Safety check for zero gradient (perfect convergence already)
+            if np.all(np.abs(grad) < 1e-9):
+                print("Gradient close to zero. Convergence reached.")
+                break
+
+            # 2. Find the 'Magic' Alpha (The Core Innovation)
+            optimal_alpha = self._find_optimal_learning_rate(theta, grad, X, y, cost_func)
+            
+            # 3. Update Weights
+            theta_new = theta - optimal_alpha * grad
+            new_cost = cost_func(theta_new, X, y)
+            
+            # Update history
+            self.history["theta"].append(theta_new.copy())
+            self.history["cost"].append(new_cost)
+            self.history["alpha"].append(optimal_alpha)
+            
+            print(f"Iter {i+1:03d}: Alpha={optimal_alpha:.6f} | Cost={new_cost:.8f}")
+
+            # 4. Stopping Criterion (Tolerance)
+            if abs(self.history["cost"][-2] - new_cost) < self.tol:
+                print(f"Convergence reached by tolerance ({self.tol}) at iter {i+1}.")
+                break
+                
+            theta = theta_new
+
+        return theta
+
+'''
+# Example of use:
+
+import numpy as np
+from brgd_optimizer import BinaryRateOptimizer
+
+# --- Problem Definition (User defined functions) ---
+
+def mse_cost(theta: np.ndarray, X: np.ndarray, y: np.ndarray) -> float:
+    """Mean Squared Error Cost Function."""
+    predictions = X * theta
+    return np.mean((predictions - y) ** 2)
+
+def mse_gradient(theta: np.ndarray, X: np.ndarray, y: np.ndarray) -> float:
+    """Gradient of Mean Squared Error."""
+    predictions = X * theta
+    error = predictions - y
+    # Partial derivative of MSE w.r.t theta
+    return 2 * np.mean(error * X)
+
+# --- Data Preparation ---
+# Dataset: y = 2x
+X_data = np.array([1, 2, 3, 4], dtype=float)
+y_data = np.array([2, 4, 6, 8], dtype=float)
+
+# Starting Point (Intentional bad guess)
+initial_theta = np.array([0.0]) 
+
+# --- Optimization Process ---
+
+# 1. Instantiate the optimizer
+optimizer = BinaryRateOptimizer(max_iter=20, tol=1e-9)
+
+# 2. Run optimization
+final_theta = optimizer.optimize(
+    X=X_data, 
+    y=y_data, 
+    initial_theta=initial_theta, 
+    cost_func=mse_cost, 
+    grad_func=mse_gradient
+)
+
+print("-" * 30)
+print(f"Expected Theta: 2.0")
+print(f"Found Theta:    {final_theta[0]:.10f}")
+'''
 
 class BinarySearch:
     def __init__(self, binary_search_priority_for_smallest_values = True, previous_value_should_be_the_basis_of_binary_search_calculations = False, previous_value_is_the_target = False, change_behavior_mid_step = False, number_of_attempts = 20):
@@ -7,8 +223,8 @@ class BinarySearch:
         self.greater_than_function = lambda x, r, tolerance: round((1/(2*tolerance))*(abs(x-r)-abs(x-r-tolerance)+tolerance))
         self.equals_function = lambda x, r, tolerance: round((1/(2*tolerance))*(abs(x-r+tolerance)-abs(x-r)+tolerance)*((-1/(2*tolerance))*(abs(x-r)-abs(x-r-tolerance)+tolerance)+1))
         self.average_function = lambda a, b: (a+b)/2
-        self.lowest_function = lambda average2, initial_lower, result2, expected_result, tolerance: self.equals_function(average2, initial_lower, tolerance) * self.greater_than_function(result2, expected_result, tolerance)
-        self.greatest_function = lambda average2, initial_upper, result2, expected_result, tolerance: self.equals_function(average2, initial_upper, tolerance) * self.greater_than_function(expected_result, result2, tolerance)
+        self.lowest_function = lambda average, initial_lower, result, expected_result, tolerance: self.equals_function(average, initial_lower, tolerance) * self.greater_than_function(result, expected_result, tolerance)
+        self.greatest_function = lambda average, initial_upper, result, expected_result, tolerance: self.equals_function(average, initial_upper, tolerance) * self.greater_than_function(expected_result, result, tolerance)
         self.rational_function = lambda a : a/(a+1)
         self.arithmetic_progression_function = lambda a1, n, r: a1+ n*r
         #self.selector_without_graduation_and_without_inclusion = lambda x, a, b, d, m: (a -m)*(ceil((1/2)*(abs(x-b)-abs(x-b-1)+1))) +m +d
@@ -41,11 +257,11 @@ class BinarySearch:
             lower_value2 = average1 * self.greater_than_function(expected_result,result1, tolerance) + lower_value1*self.greater_than_function(result1, expected_result, tolerance)
             upper_value2 = upper_value1 * self.greater_than_function(expected_result,result1, tolerance) + average1*self.greater_than_function(result1, expected_result, tolerance)
             average2 = self.average_function(lower_value2, upper_value2) +average1*self.equals_function(expected_result, result1, tolerance)
-            lower_value1 = lower_value2
-            upper_value1 = upper_value2
             average1 = average2
             average2 = int(average2)
             result2 = array[average2]
+            lower_value1 = lower_value2
+            upper_value1 = upper_value2
             result1 = result2
             continue_execution = self.greater_than_function(upper_value2, lower_value2 +1, tolerance)
             is_global_maximum = self.greatest_function (average2, initial_upper, result2, expected_result,tolerance)
