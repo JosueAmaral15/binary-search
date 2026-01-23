@@ -279,27 +279,43 @@ class AdamW:
         verbose: bool = True,
         enable_size_optimization: bool = True,
         max_parameter_count: Optional[int] = None,
-        auto_tune_strategy: str = 'adaptive'
+        auto_tune_strategy: str = 'adaptive',
+        auto_tune_beta1: bool = False,
+        auto_tune_beta2: bool = False,
+        auto_tune_epsilon: bool = False,
+        auto_tune_weight_decay: bool = False,
+        beta1_range: Tuple[float, float] = (0.8, 0.99),
+        beta2_range: Tuple[float, float] = (0.9, 0.9999),
+        epsilon_range: Tuple[float, float] = (1e-10, 1e-6),
+        weight_decay_range: Tuple[float, float] = (0.0, 0.1)
     ):
         """
-        Initialize AdamW optimizer.
+        Initialize AdamW optimizer with hyperparameter auto-tuning.
         
         Args:
             max_iter: Maximum iterations
-            beta1: First moment decay rate (momentum)
-            beta2: Second moment decay rate (adaptive learning rate)
-            epsilon: Numerical stability constant
-            weight_decay: Weight decay coefficient
+            beta1: First moment decay rate (momentum) - default if not auto-tuned
+            beta2: Second moment decay rate (adaptive learning rate) - default if not auto-tuned
+            epsilon: Numerical stability constant - default if not auto-tuned
+            weight_decay: Weight decay coefficient - default if not auto-tuned
             tol: Convergence tolerance
             use_binary_search: Enable binary search for learning rate
             base_lr: Base learning rate (fallback if binary search disabled)
             expansion_factor: Alpha expansion multiplier
             binary_search_steps: Number of binary search refinements (default strategy)
             verbose: Print optimization progress
-            enable_size_optimization: Enable automatic strategy switching based on parameter count (NEW)
-            max_parameter_count: Maximum parameter count hint (None = auto-detect) (NEW)
+            enable_size_optimization: Enable automatic strategy switching based on parameter count
+            max_parameter_count: Maximum parameter count hint (None = auto-detect)
             auto_tune_strategy: 'adaptive' (auto-choose), 'aggressive' (small models), 
-                               'conservative' (large models) (NEW)
+                               'conservative' (large models)
+            auto_tune_beta1: Enable binary search for beta1 (checkbox) - NEW
+            auto_tune_beta2: Enable binary search for beta2 (checkbox) - NEW
+            auto_tune_epsilon: Enable binary search for epsilon (checkbox) - NEW
+            auto_tune_weight_decay: Enable binary search for weight_decay (checkbox) - NEW
+            beta1_range: Search range for beta1 if auto-tuning enabled - NEW
+            beta2_range: Search range for beta2 if auto-tuning enabled - NEW
+            epsilon_range: Search range for epsilon if auto-tuning enabled - NEW
+            weight_decay_range: Search range for weight_decay if auto-tuning enabled - NEW
         """
         # Validate parameters
         if not 0.0 <= beta1 < 1.0:
@@ -316,6 +332,16 @@ class AdamW:
             raise ValueError(f"base_lr must be positive, got {base_lr}")
         if auto_tune_strategy not in ['adaptive', 'aggressive', 'conservative']:
             raise ValueError(f"auto_tune_strategy must be 'adaptive', 'aggressive', or 'conservative', got '{auto_tune_strategy}'")
+        
+        # Validate ranges
+        if beta1_range[0] >= beta1_range[1] or not (0 <= beta1_range[0] < 1) or not (0 <= beta1_range[1] < 1):
+            raise ValueError(f"beta1_range must be (low, high) with 0 <= low < high < 1, got {beta1_range}")
+        if beta2_range[0] >= beta2_range[1] or not (0 <= beta2_range[0] < 1) or not (0 <= beta2_range[1] < 1):
+            raise ValueError(f"beta2_range must be (low, high) with 0 <= low < high < 1, got {beta2_range}")
+        if epsilon_range[0] >= epsilon_range[1] or epsilon_range[0] <= 0:
+            raise ValueError(f"epsilon_range must be (low, high) with 0 < low < high, got {epsilon_range}")
+        if weight_decay_range[0] >= weight_decay_range[1] or weight_decay_range[0] < 0:
+            raise ValueError(f"weight_decay_range must be (low, high) with 0 <= low < high, got {weight_decay_range}")
             
         self.max_iter = max_iter
         self.beta1 = beta1
@@ -329,10 +355,20 @@ class AdamW:
         self.binary_search_steps = binary_search_steps
         self.verbose = verbose
         
-        # NEW: Size optimization parameters
+        # Size optimization parameters
         self.enable_size_optimization = enable_size_optimization
         self.max_parameter_count = max_parameter_count
         self.auto_tune_strategy = auto_tune_strategy
+        
+        # NEW: Hyperparameter auto-tuning (checkbox paradigm)
+        self.auto_tune_beta1 = auto_tune_beta1
+        self.auto_tune_beta2 = auto_tune_beta2
+        self.auto_tune_epsilon = auto_tune_epsilon
+        self.auto_tune_weight_decay = auto_tune_weight_decay
+        self.beta1_range = beta1_range
+        self.beta2_range = beta2_range
+        self.epsilon_range = epsilon_range
+        self.weight_decay_range = weight_decay_range
         
         # State variables (initialized in optimize)
         self.m: Optional[np.ndarray] = None  # First moment estimate
@@ -408,6 +444,119 @@ class AdamW:
                     'expansion_factor': 3.0,
                     'strategy_name': 'adaptive→conservative'
                 }
+    
+    def _tune_hyperparameter(
+        self,
+        param_name: str,
+        param_range: Tuple[float, float],
+        current_theta: np.ndarray,
+        X: np.ndarray,
+        y: np.ndarray,
+        cost_func: Callable,
+        grad_func: Callable,
+        search_steps: int
+    ) -> float:
+        """
+        Binary search for optimal hyperparameter value.
+        
+        Tests different hyperparameter values and selects the one that gives
+        best cost reduction after a few optimization steps.
+        
+        Parameters
+        ----------
+        param_name : str
+            Name of hyperparameter ('beta1', 'beta2', 'epsilon', 'weight_decay')
+        param_range : Tuple[float, float]
+            (min_value, max_value) to search within
+        current_theta : np.ndarray
+            Starting parameters
+        X : np.ndarray
+            Input features
+        y : np.ndarray
+            Target values
+        cost_func : Callable
+            Cost function
+        grad_func : Callable
+            Gradient function
+        search_steps : int
+            Number of binary search iterations
+        
+        Returns
+        -------
+        float
+            Optimal hyperparameter value
+        """
+        low, high = param_range
+        best_value = (low + high) / 2
+        best_cost = float('inf')
+        
+        if self.verbose:
+            print(f"\n  Auto-tuning {param_name} in range {param_range}...")
+        
+        # Binary search for optimal value
+        for search_iter in range(search_steps):
+            # Test three candidates
+            candidates = [
+                low,
+                (low + high) / 2.0,
+                high
+            ]
+            
+            costs = []
+            
+            for candidate_value in candidates:
+                # Temporarily set hyperparameter
+                original_value = getattr(self, param_name)
+                setattr(self, param_name, candidate_value)
+                
+                # Reinitialize state for fair comparison
+                self._initialize_state(current_theta)
+                
+                # Run a few iterations to evaluate this hyperparameter
+                theta_test = current_theta.copy()
+                test_cost = cost_func(theta_test, X, y)
+                
+                for _ in range(5):  # Quick test: 5 iterations
+                    grad = grad_func(theta_test, X, y)
+                    m_hat, v_hat = self._compute_adam_direction(grad)
+                    
+                    # Use base learning rate for testing
+                    lr_test = self.base_lr
+                    theta_test = theta_test - lr_test * m_hat / (np.sqrt(v_hat) + self.epsilon)
+                    theta_test -= lr_test * self.weight_decay * theta_test
+                    
+                    test_cost = cost_func(theta_test, X, y)
+                
+                costs.append(test_cost)
+                
+                # Restore original value
+                setattr(self, param_name, original_value)
+            
+            # Find best candidate
+            best_idx = np.argmin(costs)
+            best_value = candidates[best_idx]
+            best_cost = costs[best_idx]
+            
+            # Update search range (binary search)
+            if best_idx == 0:
+                # Best is low, search lower half
+                high = (low + high) / 2.0
+            elif best_idx == 2:
+                # Best is high, search upper half
+                low = (low + high) / 2.0
+            else:
+                # Best is middle, narrow from both sides
+                range_size = high - low
+                low = best_value - range_size * 0.25
+                high = best_value + range_size * 0.25
+                # Ensure within original bounds
+                low = max(low, param_range[0])
+                high = min(high, param_range[1])
+        
+        if self.verbose:
+            print(f"    → Optimal {param_name}: {best_value:.6f} (cost after 5 iters: {best_cost:.6f})")
+        
+        return best_value
     
     def _initialize_state(self, theta: np.ndarray) -> None:
         """Initialize moment estimates to zeros."""
@@ -590,6 +739,39 @@ class AdamW:
         # Store strategy config for use in _find_optimal_learning_rate
         self._current_binary_search_steps = binary_search_steps_to_use
         self._current_expansion_factor = expansion_factor_to_use
+        
+        # NEW: AUTO-TUNE HYPERPARAMETERS (if enabled)
+        hyperparams_tuned = []
+        
+        if self.auto_tune_beta1:
+            self.beta1 = self._tune_hyperparameter(
+                'beta1', self.beta1_range, theta, X, y, cost_func, grad_func, binary_search_steps_to_use
+            )
+            hyperparams_tuned.append(f"beta1={self.beta1:.6f}")
+        
+        if self.auto_tune_beta2:
+            self.beta2 = self._tune_hyperparameter(
+                'beta2', self.beta2_range, theta, X, y, cost_func, grad_func, binary_search_steps_to_use
+            )
+            hyperparams_tuned.append(f"beta2={self.beta2:.6f}")
+        
+        if self.auto_tune_epsilon:
+            self.epsilon = self._tune_hyperparameter(
+                'epsilon', self.epsilon_range, theta, X, y, cost_func, grad_func, binary_search_steps_to_use
+            )
+            hyperparams_tuned.append(f"epsilon={self.epsilon:.2e}")
+        
+        if self.auto_tune_weight_decay:
+            self.weight_decay = self._tune_hyperparameter(
+                'weight_decay', self.weight_decay_range, theta, X, y, cost_func, grad_func, binary_search_steps_to_use
+            )
+            hyperparams_tuned.append(f"weight_decay={self.weight_decay:.6f}")
+        
+        if hyperparams_tuned and self.verbose:
+            print(f"\n✅ Hyperparameters auto-tuned: {', '.join(hyperparams_tuned)}\n")
+        
+        # Reinitialize state after hyperparameter tuning
+        self._initialize_state(theta)
         
         for i in range(self.max_iter):
             # 1. Compute gradient
