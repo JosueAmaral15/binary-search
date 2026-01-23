@@ -1,8 +1,52 @@
+"""
+Binary Search Module - ML Optimizers, Search Algorithms, and Linear System Solvers.
+
+This module provides:
+1. Machine Learning Optimizers with binary search concepts:
+   - BinaryRateOptimizer: Gradient descent with adaptive learning rate
+   - AdamW: Adaptive moment estimation with weight decay
+   
+2. Binary Search Algorithms:
+   - BinarySearch: Collection of search algorithms and root finding methods
+
+3. Linear System Solvers (NEW in v1.2):
+   - BinaryGaussSeidel: Gauss-Seidel solver with binary search optimizations
+
+For new code, prefer importing from submodules:
+    from binary_search.optimizers import AdamW, BinaryRateOptimizer
+    from binary_search.algorithms import BinarySearch
+    from binary_search.linear_systems import BinaryGaussSeidel
+
+For backward compatibility, all classes are still available directly:
+    from binary_search import BinaryRateOptimizer, BinarySearch
+"""
+
+# Import from new modular structure
+from binary_search.optimizers import BinaryRateOptimizer, AdamW
+from binary_search.algorithms import BinarySearch
+from binary_search import linear_systems
+
+# Expose all classes at package level for backward compatibility
+__all__ = [
+    'BinaryRateOptimizer',
+    'AdamW', 
+    'BinarySearch',
+    'linear_systems'
+]
+
+# Version info
+__version__ = '1.1.0'
+
+# ============================================================================
+# LEGACY CODE BELOW - Kept for backward compatibility
+# New code should import from binary_search.optimizers or binary_search.algorithms
+# ============================================================================
+
 from math import isfinite
 import numpy as np
 from typing import Callable, Dict, List
 
-class BinaryRateOptimizer:
+class _LegacyBinaryRateOptimizer:
     """
     Gradient Descent Optimizer with Binary Search Learning Rate (BR-GD).
     

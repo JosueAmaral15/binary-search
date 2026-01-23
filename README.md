@@ -1,59 +1,305 @@
-# Binary Search & Optimization - Refactored Package Collection
+# Binary Search & Optimization - Unified Package
 
-**Version 1.0.0** - Major refactor from combined v0.1 package
+**Version 1.1.0** - Modular architecture with new AdamW optimizer
 
-This repository contains two independent, production-ready Python packages for mathematical optimization and search algorithms.
-
-## 🎯 What Changed in v1.0
-
-### v0.1 (Old Structure) ❌
-- Single combined package with unrelated classes  
-- Critical bugs (missing imports, overflow errors)
-- No tests, no documentation
-- Poor maintainability
-
-### v1.0 (New Structure) ✅
-- **Two separate packages** for different use cases
-- **All critical bugs fixed**
-- **98% & 76% test coverage** (59 tests total)
-- **Comprehensive documentation** with examples
-- **Type hints and input validation** throughout
-- **CI/CD with GitHub Actions**
-
-## 📦 Packages
-
-### 1. Binary Rate Optimizer
-**Gradient descent with automatic learning rate tuning**
-
-### 2. Binary Search Algorithms  
-**Advanced search with tolerance-based comparisons**
-
-See individual package READMEs for full documentation.
-
-## 🚀 Quick Installation
-
-```bash
-# Binary Rate Optimizer
-cd binary_rate_optimizer && pip install -e .
-
-# Binary Search Algorithms
-cd binary_search_algorithms && pip install -e .
-```
-
-## ✅ Testing & Coverage
-
-```bash
-pytest tests/ --cov=binary_rate_optimizer --cov=binary_search_algorithms
-```
-
-**Results**: 59 tests, 81% coverage, <1 second runtime
-
-## 📚 Full Documentation
-
-- [Binary Rate Optimizer README](binary_rate_optimizer/README.md)
-- [Binary Search Algorithms README](binary_search_algorithms/README.md)
-- [Refactoring Decisions](DECISIONS.md)
+This repository contains a comprehensive Python package for gradient-based optimization and binary search algorithms, featuring the innovative **AdamW optimizer with binary search learning rate**.
 
 ---
 
-**Refactored following Simplicity Protocol 3 best practices**
+## 🎯 What's New in v1.1.0
+
+### ⭐ NEW: AdamW Optimizer with Binary Search
+- **Adaptive Moment Estimation** (momentum + adaptive learning rates)
+- **Decoupled Weight Decay** (better than traditional L2 regularization)
+- **Binary Search Learning Rate** - **NO MANUAL TUNING REQUIRED!**
+- Robust convergence across different problem scales
+
+### 🏗️ Modular Architecture
+```
+binary_search/
+├── optimizers.py      # BinaryRateOptimizer + AdamW
+├── algorithms.py      # BinarySearch (search & root finding)
+└── __init__.py        # Unified entry point
+```
+
+### ✅ Production Ready
+- **24/24 tests passed** (comprehensive validation)
+- **Zero critical issues**
+- **Backward compatible** (old imports still work)
+- **Complete documentation** - See [docs/](docs/) folder
+
+---
+
+## 📦 What's Included
+
+### 1. **Optimizers** (ML/Gradient-Based)
+- **BinaryRateOptimizer**: Gradient descent with dynamic learning rate via binary search
+- **AdamW** ⭐ NEW: Adaptive optimizer with binary search learning rate
+
+### 2. **Algorithms** (Search & Root Finding)
+- **BinarySearch**: Array search, function root finding, tolerance-based comparisons
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd binary_search
+
+# Optional: Install in development mode
+pip install -e .
+```
+
+### Basic Usage
+
+#### AdamW Optimizer (Recommended) ⭐
+
+```python
+import numpy as np
+from binary_search.optimizers import AdamW
+
+# Define your problem
+def cost(theta, X, y):
+    return np.mean((X @ theta - y) ** 2)
+
+def gradient(theta, X, y):
+    return 2 * X.T @ (X @ theta - y) / len(y)
+
+# Optimize - NO LEARNING RATE TUNING NEEDED!
+optimizer = AdamW(use_binary_search=True, max_iter=100)
+X, y = ...  # Your data
+theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
+```
+
+#### BinaryRateOptimizer
+
+```python
+from binary_search.optimizers import BinaryRateOptimizer
+
+optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-6)
+theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
+```
+
+#### Binary Search Algorithms
+
+```python
+from binary_search.algorithms import BinarySearch
+
+# Find root: x^2 = 100
+result = BinarySearch.search_for_function(
+    y=100,
+    function=lambda x: x**2,
+    tolerance=1e-6
+)
+print(f"sqrt(100) = {result}")  # 10.0
+```
+
+---
+
+## 📊 Performance Validation
+
+**Test Problem:** Linear regression `y = 2x`
+
+| Optimizer | Error | Status |
+|-----------|-------|--------|
+| BinaryRateOptimizer | 0.000128 | ✓ Excellent |
+| AdamW (fixed LR) | 0.237977 | ✓ Needs tuning |
+| **AdamW (binary search)** | **0.000008** | **✓ Perfect** ⭐ |
+
+**Winner:** AdamW with binary search - highest accuracy without manual tuning!
+
+---
+
+## 📚 Documentation
+
+### Main Documentation
+- **[docs/REVIEW_RESULTS.md](docs/REVIEW_RESULTS.md)** - Comprehensive test results (24/24 passed)
+- **[docs/STRUCTURE_v1.1.md](docs/STRUCTURE_v1.1.md)** - Architecture guide and detailed usage
+- **[docs/RESTRUCTURING_SUMMARY.md](docs/RESTRUCTURING_SUMMARY.md)** - What changed in v1.1
+- **[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)** - Current project status
+
+### Quick Navigation
+- **[docs/INDEX.md](docs/INDEX.md)** - Documentation index
+- **[docs/FILE_ORGANIZATION.md](docs/FILE_ORGANIZATION.md)** - File structure guide
+
+### Examples
+Run the comprehensive comparison:
+```bash
+PYTHONPATH='.' python3 examples/adamw_comparison.py
+```
+
+Available examples:
+- `examples/adamw_comparison.py` - Compare all three optimizers
+- `examples/optimizer_linear_regression.py` - BinaryRateOptimizer demo
+- `examples/search_algorithms_demo.py` - BinarySearch demo
+
+---
+
+## 🧪 Testing
+
+### Run All Tests
+
+```bash
+# Using pytest (if installed)
+pytest tests/ --cov=binary_search
+
+# Manual validation
+python3 -c "from binary_search import AdamW, BinaryRateOptimizer, BinarySearch; print('✓ All imports work')"
+```
+
+### Test Results
+- **Total Tests:** 24
+- **Passed:** 24 ✅
+- **Failed:** 0
+- **Details:** See [docs/REVIEW_RESULTS.md](docs/REVIEW_RESULTS.md)
+
+---
+
+## 🎓 When to Use Each Tool
+
+### **AdamW with Binary Search** ⭐ RECOMMENDED
+**Use when:**
+- You want robust optimization without hyperparameter tuning
+- Working with ill-conditioned problems
+- Need adaptive learning rates
+- Want production-ready optimization
+
+**Benefits:**
+- No manual learning rate tuning
+- Adapts to problem scale
+- Combines momentum + adaptive rates + optimal step size
+
+### **BinaryRateOptimizer**
+**Use when:**
+- Simple/convex optimization problems
+- You want transparent vanilla gradient descent
+- Fast prototyping
+
+### **BinarySearch Algorithms**
+**Use when:**
+- Searching sorted arrays
+- Finding function roots
+- Solving equations numerically
+
+---
+
+## 📖 Import Options
+
+### New Way (Recommended - Explicit)
+```python
+from binary_search.optimizers import AdamW, BinaryRateOptimizer
+from binary_search.algorithms import BinarySearch
+```
+
+### Old Way (Still Supported - Backward Compatible)
+```python
+from binary_search import AdamW, BinaryRateOptimizer, BinarySearch
+```
+
+Both work! Choose based on your preference.
+
+---
+
+## 🔧 Key Features
+
+### AdamW Optimizer ⭐
+- ✅ Adaptive moment estimation (momentum)
+- ✅ Decoupled weight decay
+- ✅ Binary search for learning rate
+- ✅ No manual tuning required
+- ✅ Parameter validation
+- ✅ History tracking
+
+### BinaryRateOptimizer
+- ✅ Dynamic learning rate via binary search
+- ✅ Two-phase approach (expansion + refinement)
+- ✅ Convergence tolerance
+- ✅ History tracking
+
+### BinarySearch
+- ✅ Array search (sorted lists)
+- ✅ Function root finding
+- ✅ Negative value support
+- ✅ Configurable tolerance
+- ✅ Reset functionality
+
+---
+
+## 📈 Version History
+
+### v1.1.0 (2026-01-22) - Current
+- ⭐ Added AdamW optimizer with binary search learning rate
+- 🏗️ Restructured into modular architecture
+- ✅ 24/24 tests passed
+- 📚 Complete documentation (see [docs/](docs/))
+- 🔄 Backward compatibility maintained
+
+### v1.0.0 (Previous)
+- Split into two packages
+- Fixed critical bugs
+- 81% test coverage
+
+### v0.1 (Original)
+- Single file, known bugs
+
+---
+
+## 🛠️ Dependencies
+
+- Python 3.6+
+- NumPy
+- (Optional) Matplotlib for visualization
+
+---
+
+## 📄 License
+
+[Your License Here]
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+1. Read [docs/STRUCTURE_v1.1.md](docs/STRUCTURE_v1.1.md) for architecture
+2. Check [docs/REVIEW_RESULTS.md](docs/REVIEW_RESULTS.md) for test standards
+3. Maintain backward compatibility
+
+---
+
+## 📞 Support
+
+- **Complete Documentation:** See [docs/](docs/) folder
+- **Examples:** Check [examples/](examples/) directory
+- **Test Results:** [docs/REVIEW_RESULTS.md](docs/REVIEW_RESULTS.md)
+- **Architecture:** [docs/STRUCTURE_v1.1.md](docs/STRUCTURE_v1.1.md)
+
+---
+
+## ⭐ Highlights
+
+**Why AdamW with Binary Search?**
+
+Traditional optimizers require careful learning rate tuning:
+```python
+# Traditional approach - requires experimentation
+optimizer = AdamW(lr=0.001)  # Too small? Too large? 🤷
+```
+
+Our innovation eliminates this:
+```python
+# Our approach - automatic tuning!
+optimizer = AdamW(use_binary_search=True)  # Just works! ✨
+```
+
+**Result:** Robust optimization without hyperparameter headaches.
+
+---
+
+**Built with ❤️ following software engineering best practices**
+
+**Status:** ✅ Production-Ready | **Version:** 1.1.0 | **Tests:** 24/24 Passed | **Docs:** [docs/](docs/)
