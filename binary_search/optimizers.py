@@ -276,7 +276,10 @@ class AdamW:
         base_lr: float = 0.001,
         expansion_factor: float = 2.0,
         binary_search_steps: int = 10,
-        verbose: bool = True
+        verbose: bool = True,
+        enable_size_optimization: bool = True,
+        max_parameter_count: Optional[int] = None,
+        auto_tune_strategy: str = 'adaptive'
     ):
         """
         Initialize AdamW optimizer.
@@ -291,8 +294,12 @@ class AdamW:
             use_binary_search: Enable binary search for learning rate
             base_lr: Base learning rate (fallback if binary search disabled)
             expansion_factor: Alpha expansion multiplier
-            binary_search_steps: Number of binary search refinements
+            binary_search_steps: Number of binary search refinements (default strategy)
             verbose: Print optimization progress
+            enable_size_optimization: Enable automatic strategy switching based on parameter count (NEW)
+            max_parameter_count: Maximum parameter count hint (None = auto-detect) (NEW)
+            auto_tune_strategy: 'adaptive' (auto-choose), 'aggressive' (small models), 
+                               'conservative' (large models) (NEW)
         """
         # Validate parameters
         if not 0.0 <= beta1 < 1.0:
@@ -307,6 +314,8 @@ class AdamW:
             raise ValueError(f"tol must be positive, got {tol}")
         if base_lr <= 0:
             raise ValueError(f"base_lr must be positive, got {base_lr}")
+        if auto_tune_strategy not in ['adaptive', 'aggressive', 'conservative']:
+            raise ValueError(f"auto_tune_strategy must be 'adaptive', 'aggressive', or 'conservative', got '{auto_tune_strategy}'")
             
         self.max_iter = max_iter
         self.beta1 = beta1
@@ -320,6 +329,11 @@ class AdamW:
         self.binary_search_steps = binary_search_steps
         self.verbose = verbose
         
+        # NEW: Size optimization parameters
+        self.enable_size_optimization = enable_size_optimization
+        self.max_parameter_count = max_parameter_count
+        self.auto_tune_strategy = auto_tune_strategy
+        
         # State variables (initialized in optimize)
         self.m: Optional[np.ndarray] = None  # First moment estimate
         self.v: Optional[np.ndarray] = None  # Second moment estimate
@@ -332,6 +346,68 @@ class AdamW:
             "lr": [],
             "grad_norm": []
         }
+    
+    def _determine_strategy(self, n_params: int) -> dict:
+        """
+        Determine optimization strategy based on parameter count.
+        
+        Similar to BinaryGaussSeidel's size optimization, but tailored for ML models.
+        
+        Parameters
+        ----------
+        n_params : int
+            Number of model parameters
+        
+        Returns
+        -------
+        dict
+            Strategy configuration with binary_search_steps and other settings
+        """
+        if not self.enable_size_optimization:
+            return {
+                'binary_search_steps': self.binary_search_steps,
+                'expansion_factor': self.expansion_factor,
+                'strategy_name': 'default'
+            }
+        
+        # Apply strategy selection
+        if self.auto_tune_strategy == 'aggressive':
+            # Aggressive: More binary search iterations, better for small models
+            return {
+                'binary_search_steps': 15,  # More thorough search
+                'expansion_factor': 1.5,    # Smaller expansion (more careful)
+                'strategy_name': 'aggressive'
+            }
+        elif self.auto_tune_strategy == 'conservative':
+            # Conservative: Fewer iterations, better for large models
+            return {
+                'binary_search_steps': 5,   # Faster, less overhead
+                'expansion_factor': 3.0,    # Larger expansion (faster exploration)
+                'strategy_name': 'conservative'
+            }
+        else:  # 'adaptive'
+            # Auto-choose based on parameter count
+            if n_params <= 20:
+                # Small models (few parameters): Use aggressive
+                return {
+                    'binary_search_steps': 15,
+                    'expansion_factor': 1.5,
+                    'strategy_name': 'adaptive→aggressive'
+                }
+            elif n_params <= 100:
+                # Medium models: Use default
+                return {
+                    'binary_search_steps': self.binary_search_steps,
+                    'expansion_factor': self.expansion_factor,
+                    'strategy_name': 'adaptive→default'
+                }
+            else:
+                # Large models (many parameters): Use conservative
+                return {
+                    'binary_search_steps': 5,
+                    'expansion_factor': 3.0,
+                    'strategy_name': 'adaptive→conservative'
+                }
     
     def _initialize_state(self, theta: np.ndarray) -> None:
         """Initialize moment estimates to zeros."""
@@ -419,6 +495,10 @@ class AdamW:
         """
         base_loss = cost_func(current_theta, X, y)
         
+        # Use strategy-determined expansion factor
+        expansion_factor = getattr(self, '_current_expansion_factor', self.expansion_factor)
+        binary_search_steps = getattr(self, '_current_binary_search_steps', self.binary_search_steps)
+        
         # PHASE 1: Expansion
         lr_low = 0.0
         lr_high = self.base_lr * 0.1  # Start conservatively
@@ -434,7 +514,7 @@ class AdamW:
                 best_loss = loss_new
                 best_lr = lr_high
                 lr_low = lr_high
-                lr_high *= self.expansion_factor
+                lr_high *= expansion_factor  # Use strategy-determined factor
             else:
                 expanded = True
                 break
@@ -442,8 +522,8 @@ class AdamW:
         if not expanded:
             return best_lr
         
-        # PHASE 2: Binary refinement
-        for _ in range(self.binary_search_steps):
+        # PHASE 2: Binary refinement (use strategy-determined steps)
+        for _ in range(binary_search_steps):
             lr_mid = (lr_low + lr_high) / 2
             loss_mid = self._get_loss_at_step(lr_mid, current_theta, m_hat, v_hat, X, y, cost_func)
             
@@ -485,6 +565,12 @@ class AdamW:
         theta = initial_theta.copy()
         self._initialize_state(theta)
         
+        # NEW: Determine strategy based on parameter count
+        n_params = theta.size
+        strategy = self._determine_strategy(n_params)
+        binary_search_steps_to_use = strategy['binary_search_steps']
+        expansion_factor_to_use = strategy['expansion_factor']
+        
         # Save initial state
         initial_cost = cost_func(theta, X, y)
         self.history["theta"].append(theta.copy())
@@ -496,6 +582,14 @@ class AdamW:
             print("--- Starting AdamW Optimization ---")
             print(f"Initial Cost: {initial_cost:.6f}")
             print(f"Binary Search: {'Enabled' if self.use_binary_search else 'Disabled'}")
+            print(f"Parameters: {n_params}")
+            print(f"Strategy: {strategy['strategy_name']}")
+            print(f"Binary search steps: {binary_search_steps_to_use}")
+            print(f"Expansion factor: {expansion_factor_to_use}")
+        
+        # Store strategy config for use in _find_optimal_learning_rate
+        self._current_binary_search_steps = binary_search_steps_to_use
+        self._current_expansion_factor = expansion_factor_to_use
         
         for i in range(self.max_iter):
             # 1. Compute gradient
