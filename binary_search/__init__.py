@@ -25,11 +25,13 @@ For backward compatibility, all classes are still available directly:
 from binary_search.optimizers import BinaryRateOptimizer, AdamW
 from binary_search.algorithms import BinarySearch
 from binary_search import linear_systems
+from binary_search.observer_tuning import ObserverAdamW
 
 # Expose all classes at package level for backward compatibility
 __all__ = [
     'BinaryRateOptimizer',
-    'AdamW', 
+    'AdamW',
+    'ObserverAdamW', 
     'BinarySearch',
     'linear_systems'
 ]
