@@ -30,6 +30,79 @@ binary_search/
 
 ---
 
+## 🎯 Algorithm Selection Guide
+
+### 📊 When to Use Each Algorithm
+
+#### ✅ **LINEAR Problems** (y = Ax + b, systems of equations)
+
+**Winner: NumPy Direct Solve** - 10-1000× faster than gradient descent
+
+```python
+import numpy as np
+
+# For linear regression or Ax = b
+A = X.T @ X
+b = X.T @ y
+theta = np.linalg.solve(A, b)  # FASTEST - use this!
+```
+
+**Use when:**
+- Linear regression (any number of variables)
+- Solving systems of equations: Ax = b
+- Problem can be formulated as matrix equation
+- Need exact solution
+- 5 to 10,000+ variables
+
+---
+
+#### ⚙️ **NON-LINEAR Problems** (custom cost functions, neural networks)
+
+**Winner: BinaryRateOptimizer** - 10× faster than AdamW
+
+```python
+from binary_search import BinaryRateOptimizer
+
+# For any gradient-based optimization
+optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-6)
+theta = optimizer.optimize(X, y, initial_theta, cost_fn, gradient_fn)
+```
+
+**Use when:**
+- Non-linear optimization
+- Custom/complex cost functions
+- Logistic regression, neural networks
+- Need both speed AND accuracy
+- Large datasets (scales well)
+
+**Alternative: AdamW**
+```python
+from binary_search import AdamW
+
+# When you need per-parameter adaptive learning rates
+optimizer = AdamW(use_binary_search=True, max_iter=100)
+theta = optimizer.optimize(X, y, initial_theta, cost_fn, gradient_fn)
+```
+
+**Use AdamW when:**
+- Deep learning / PyTorch integration
+- Need per-parameter learning rates
+- Small to medium datasets
+
+---
+
+### 📈 Performance Comparison
+
+| Algorithm | Speed | Accuracy | Best For |
+|-----------|-------|----------|----------|
+| **NumPy solve** | ⚡⚡⚡ | 🎯🎯🎯 | Linear systems (Ax=b) |
+| **BinaryRateOptimizer** | ⚡⚡ | 🎯🎯 | Non-linear gradient descent |
+| **AdamW** | ⚡ | 🎯 | Deep learning frameworks |
+
+**Benchmarks:** See [docs/SCALABILITY_BENCHMARK.md](docs/SCALABILITY_BENCHMARK.md) for detailed performance analysis across dataset sizes (5-500 variables).
+
+---
+
 ## 📦 What's Included
 
 ### 1. **Optimizers** (ML/Gradient-Based)
@@ -38,6 +111,10 @@ binary_search/
 
 ### 2. **Algorithms** (Search & Root Finding)
 - **BinarySearch**: Array search, function root finding, tolerance-based comparisons
+
+### 3. **Linear System Solvers**
+- **BinaryGaussSeidel**: Iterative solver for sparse, diagonally-dominant matrices
+- **Note:** For most linear systems, use `np.linalg.solve()` instead (much faster)
 
 ---
 
