@@ -85,7 +85,7 @@ result = solver.fit_polynomial(x_data, y_data)  # Uses degree=3
 
 ```python
 import numpy as np
-from binary_search.linear_systems import BinaryGaussSeidel
+from math_toolkit.linear_systems import BinaryGaussSeidel
 
 # Linear regression (y = 5 + 2x)
 x = np.array([1, 2, 3, 4, 5])
@@ -219,7 +219,7 @@ fit_polynomial(x_data, y_data, degree=None)
 ### Example 1: Basic Linear System
 
 ```python
-from binary_search.linear_systems import BinaryGaussSeidel
+from math_toolkit.linear_systems import BinaryGaussSeidel
 import numpy as np
 
 A = np.array([[4, -1, 0], [-1, 4, -1], [0, -1, 3]])

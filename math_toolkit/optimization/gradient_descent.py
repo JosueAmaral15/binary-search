@@ -66,7 +66,20 @@ class BinaryRateOptimizer:
             expansion_factor: Multiplier used during alpha expansion phase
             binary_search_steps: Number of binary subdivisions to refine alpha
             verbose: If True, print optimization progress
+            
+        Raises:
+            ValueError: If parameters are invalid
         """
+        # Validation
+        if max_iter <= 0:
+            raise ValueError("max_iter must be positive")
+        if tol <= 0:
+            raise ValueError("tol must be positive")
+        if expansion_factor <= 1.0:
+            raise ValueError("expansion_factor must be > 1.0")
+        if binary_search_steps <= 0:
+            raise ValueError("binary_search_steps must be positive")
+            
         self.max_iter = max_iter
         self.tol = tol
         self.expansion_factor = expansion_factor
@@ -173,7 +186,22 @@ class BinaryRateOptimizer:
 
         Returns:
             np.ndarray: The final optimized parameters (theta)
+            
+        Raises:
+            ValueError: If inputs are invalid
         """
+        # Input validation
+        if not isinstance(X, np.ndarray) or not isinstance(y, np.ndarray):
+            raise ValueError("X and y must be numpy arrays")
+        if not isinstance(initial_theta, np.ndarray):
+            raise ValueError("initial_theta must be a numpy array")
+        if len(X) != len(y):
+            raise ValueError("X and y must have same length")
+        if not np.all(np.isfinite(X)) or not np.all(np.isfinite(y)):
+            raise ValueError("X and y must not contain NaN or Inf")
+        if not np.all(np.isfinite(initial_theta)):
+            raise ValueError("initial_theta must not contain NaN or Inf")
+            
         theta = initial_theta.copy()
         
         # Save initial state

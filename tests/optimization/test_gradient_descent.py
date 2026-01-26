@@ -86,8 +86,8 @@ class TestBinaryRateOptimizerOptimization:
         y = np.array([2, 4, 6, 8], dtype=float)
         initial_theta = np.array([0.0])
 
-        optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-9)
-        final_theta = optimizer.optimize(X, y, initial_theta, mse_cost, mse_gradient, verbose=False)
+        optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-9, verbose=False)
+        final_theta = optimizer.optimize(X, y, initial_theta, mse_cost, mse_gradient)
 
         # Should find theta ≈ 2.0
         assert abs(final_theta[0] - 2.0) < 0.01
@@ -106,7 +106,7 @@ class TestBinaryRateOptimizerOptimization:
         initial_theta = np.array([2.9])  # Close to optimal (3.0)
 
         optimizer = BinaryRateOptimizer(max_iter=10, tol=1e-6)
-        final_theta = optimizer.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        final_theta = optimizer.optimize(X, y, initial_theta, cost, grad)
 
         assert abs(final_theta[0] - 3.0) < 0.01
         # Should converge in few iterations
@@ -125,8 +125,8 @@ class TestBinaryRateOptimizerOptimization:
         y = np.array([3, 6, 9, 12])
         initial_theta = np.array([-100.0])  # Very bad initial guess
 
-        optimizer = BinaryRateOptimizer(max_iter=100, tol=1e-6)
-        final_theta = optimizer.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer = BinaryRateOptimizer(max_iter=100, tol=1e-6, verbose=False)
+        final_theta = optimizer.optimize(X, y, initial_theta, cost, grad)
 
         assert abs(final_theta[0] - 3.0) < 0.1
 
@@ -144,7 +144,7 @@ class TestBinaryRateOptimizerOptimization:
         initial_theta = np.array([0.0])
 
         optimizer = BinaryRateOptimizer(max_iter=20, tol=1e-9)
-        optimizer.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer.optimize(X, y, initial_theta, cost, grad)
 
         # Check history structure
         assert len(optimizer.history["theta"]) > 0
@@ -175,8 +175,8 @@ class TestBinaryRateOptimizerOptimization:
         y = np.array([1, 2, 3])
         initial_theta = np.array([1.0])
 
-        optimizer = BinaryRateOptimizer(max_iter=100, tol=1e-6)
-        optimizer.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer = BinaryRateOptimizer(max_iter=100, tol=1e-6, verbose=False)
+        optimizer.optimize(X, y, initial_theta, cost, grad)
 
         # Should stop immediately due to zero gradient
         assert len(optimizer.history["cost"]) == 1
@@ -197,11 +197,11 @@ class TestBinaryRateOptimizerOptimization:
         optimizer = BinaryRateOptimizer(max_iter=10, tol=1e-6)
 
         # First optimization
-        optimizer.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer.optimize(X, y, initial_theta, cost, grad)
         first_history_len = len(optimizer.history["cost"])
 
         # Second optimization
-        optimizer.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer.optimize(X, y, initial_theta, cost, grad)
         second_history_len = len(optimizer.history["cost"])
 
         # History should be from second run only
@@ -337,8 +337,8 @@ class TestBinaryRateOptimizerEdgeCases:
         y = np.array([4.0])
         initial_theta = np.array([0.0])
 
-        optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-9)
-        final_theta = optimizer.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-9, verbose=False)
+        final_theta = optimizer.optimize(X, y, initial_theta, cost, grad)
 
         assert abs(final_theta[0] - 2.0) < 0.01
 
@@ -355,8 +355,8 @@ class TestBinaryRateOptimizerEdgeCases:
         y = np.array([2, 4, 6])
         initial_theta = np.array([2.0])  # Already optimal
 
-        optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-9)
-        final_theta = optimizer.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-9, verbose=False)
+        final_theta = optimizer.optimize(X, y, initial_theta, cost, grad)
 
         assert abs(final_theta[0] - 2.0) < 0.01
         # Should converge very quickly
@@ -375,8 +375,8 @@ class TestBinaryRateOptimizerEdgeCases:
         y = np.array([2, 4, 6])
         initial_theta = np.array([0.0])
 
-        optimizer = BinaryRateOptimizer(max_iter=5, tol=1e-9)
-        optimizer.optimize(X, y, initial_theta, cost, grad, verbose=True)
+        optimizer = BinaryRateOptimizer(max_iter=5, tol=1e-9, verbose=True)
+        optimizer.optimize(X, y, initial_theta, cost, grad)
 
         captured = capsys.readouterr()
         assert "Starting BR-GD Optimization" in captured.out
@@ -397,12 +397,12 @@ class TestBinaryRateOptimizerEdgeCases:
         initial_theta = np.array([1.5])  # Close to optimal (2.0)
 
         # Tight tolerance should require more iterations
-        optimizer_tight = BinaryRateOptimizer(max_iter=100, tol=1e-12)
-        optimizer_tight.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer_tight = BinaryRateOptimizer(max_iter=100, tol=1e-12, verbose=False)
+        optimizer_tight.optimize(X, y, initial_theta, cost, grad)
 
         # Loose tolerance should require fewer iterations
         optimizer_loose = BinaryRateOptimizer(max_iter=100, tol=1e-2)
-        optimizer_loose.optimize(X, y, initial_theta, cost, grad, verbose=False)
+        optimizer_loose.optimize(X, y, initial_theta, cost, grad)
 
         # Loose tolerance should converge faster
         assert len(optimizer_loose.history["cost"]) <= len(optimizer_tight.history["cost"])

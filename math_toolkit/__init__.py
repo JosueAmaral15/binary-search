@@ -13,13 +13,10 @@ This package provides:
 3. Linear System Solvers:
    - BinaryGaussSeidel: Iterative solver with binary search optimizations
 
-Recommended imports:
+Usage:
     from math_toolkit.binary_search import BinarySearch
     from math_toolkit.optimization import BinaryRateOptimizer, AdamW, ObserverAdamW
     from math_toolkit.linear_systems import BinaryGaussSeidel
-
-For backward compatibility, all classes are also available at package level:
-    from math_toolkit import BinarySearch, BinaryRateOptimizer, AdamW
 """
 
 # Import from submodules

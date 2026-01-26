@@ -152,7 +152,7 @@ class ObserverAdamW(AdamW):
     
     Examples
     --------
-    >>> from binary_search.observer_tuning import ObserverAdamW
+    >>> from math_toolkit.optimization import ObserverAdamW
     >>> import numpy as np
     >>> 
     >>> # Simple example

@@ -36,13 +36,13 @@ Classes are now organized by function:
 
 ### **New Recommended Way** (Explicit)
 ```python
-from binary_search.optimizers import AdamW, BinaryRateOptimizer
+from math_toolkit.optimization import AdamW, BinaryRateOptimizer
 from binary_search.algorithms import BinarySearch
 ```
 
 ### **Legacy Way** (Still Supported)
 ```python
-from binary_search import BinaryRateOptimizer, AdamW, BinarySearch
+from math_toolkit.optimization import BinaryRateOptimizer, AdamW, BinarySearch
 ```
 
 Both work! Choose based on your preference.
@@ -52,7 +52,7 @@ Both work! Choose based on your preference.
 ### Example 1: AdamW Optimizer
 ```python
 import numpy as np
-from binary_search.optimizers import AdamW
+from math_toolkit.optimization import AdamW
 
 # Define problem
 def cost(theta, X, y):
@@ -72,7 +72,7 @@ theta = optimizer.optimize(X, y, np.zeros(5), cost, gradient)
 
 ### Example 2: BinaryRateOptimizer
 ```python
-from binary_search.optimizers import BinaryRateOptimizer
+from math_toolkit.optimization import BinaryRateOptimizer
 
 optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-6)
 theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
@@ -205,13 +205,13 @@ AdamW(
 
 1. **New Projects**: Use AdamW with binary search
    ```python
-   from binary_search.optimizers import AdamW
+   from math_toolkit.optimization import AdamW
    optimizer = AdamW(use_binary_search=True)
    ```
 
 2. **Existing Code**: Works unchanged (backward compatible)
    ```python
-   from binary_search import BinaryRateOptimizer  # Still works!
+   from math_toolkit.optimization import BinaryRateOptimizer  # Still works!
    ```
 
 3. **Search Problems**: Use BinarySearch algorithms

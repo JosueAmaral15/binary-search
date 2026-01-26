@@ -133,7 +133,7 @@ result = solver.solve(A, b)  # Auto-optimizes behind the scenes
 
 ### Default (Paradigm): Auto-tuning ON
 ```python
-from binary_search.linear_systems import BinaryGaussSeidel
+from math_toolkit.linear_systems import BinaryGaussSeidel
 import numpy as np
 
 A = np.array([[4, -1, 0], [-1, 4, -1], [0, -1, 3]], dtype=float)

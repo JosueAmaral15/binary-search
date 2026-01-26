@@ -19,7 +19,7 @@ git checkout main
 
 ### Step 2: Verify old code works
 ```bash
-python3 -c "from binary_search import BinaryRateOptimizer, BinarySearch; print('OK')"
+python3 -c "from math_toolkit.optimization import BinaryRateOptimizer, BinarySearch; print('OK')"
 ```
 
 ### Step 3: Delete COM branch (optional)
@@ -58,7 +58,7 @@ After rollback, verify:
 ```bash
 # Test original package works
 python3 -c "
-from binary_search import BinaryRateOptimizer, BinarySearch
+from math_toolkit.optimization import BinaryRateOptimizer, BinarySearch
 import numpy as np
 
 # Test optimizer
@@ -94,7 +94,7 @@ from binary_rate_optimizer import BinaryRateOptimizer
 from binary_search_algorithms import BinarySearch
 
 # Change to v0.1 imports
-from binary_search import BinaryRateOptimizer, BinarySearch
+from math_toolkit.optimization import BinaryRateOptimizer, BinarySearch
 ```
 
 ## Rollback Decision Matrix

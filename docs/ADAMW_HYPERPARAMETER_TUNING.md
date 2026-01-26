@@ -89,7 +89,7 @@ AdamW(
 ### Example 1: Auto-tune beta1 only
 
 ```python
-from binary_search.optimizers import AdamW
+from math_toolkit.optimization import AdamW
 import numpy as np
 
 # Checkbox: ☑ beta1  ☐ beta2  ☐ epsilon  ☐ weight_decay

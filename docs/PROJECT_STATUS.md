@@ -188,7 +188,7 @@ pip install -e .  # Optional
 
 ### Using AdamW (Recommended)
 ```python
-from binary_search.optimizers import AdamW
+from math_toolkit.optimization import AdamW
 
 optimizer = AdamW(use_binary_search=True)
 theta = optimizer.optimize(X, y, theta_init, cost, gradient)

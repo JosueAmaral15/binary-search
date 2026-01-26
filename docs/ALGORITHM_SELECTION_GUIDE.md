@@ -122,7 +122,7 @@ Any optimization problem that **cannot** be written as Ax = b:
 
 #### Logistic Regression
 ```python
-from binary_search import BinaryRateOptimizer
+from math_toolkit.optimization import BinaryRateOptimizer
 import numpy as np
 
 def sigmoid(z):
@@ -143,7 +143,7 @@ theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
 
 #### Custom Cost Function
 ```python
-from binary_search import BinaryRateOptimizer
+from math_toolkit.optimization import BinaryRateOptimizer
 
 # Non-linear cost: minimize sum of absolute errors + penalty
 def custom_cost(theta, X, y):
@@ -165,7 +165,7 @@ theta = optimizer.optimize(X, y, initial_theta, custom_cost, custom_gradient)
 
 #### Neural Network Training
 ```python
-from binary_search import BinaryRateOptimizer
+from math_toolkit.optimization import BinaryRateOptimizer
 
 # Simple 2-layer network
 def forward(theta, X):
@@ -202,7 +202,7 @@ theta = optimizer.optimize(X, y, initial_theta, mse_cost, compute_gradient)
 ### When to Use AdamW
 
 ```python
-from binary_search import AdamW
+from math_toolkit.optimization import AdamW
 
 optimizer = AdamW(use_binary_search=True, max_iter=100)
 theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
@@ -225,7 +225,7 @@ theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
 ### When to Use
 
 ```python
-from binary_search.linear_systems import BinaryGaussSeidel
+from math_toolkit.linear_systems import BinaryGaussSeidel
 
 solver = BinaryGaussSeidel(max_iterations=1000, tolerance=1e-6)
 x = solver.solve(A, b)
@@ -250,7 +250,7 @@ x = solver.solve(A, b)
 ### When to Use
 
 ```python
-from binary_search import BinarySearch
+from math_toolkit.optimization import BinarySearch
 
 # Find value in sorted array
 index = BinarySearch.search([1, 2, 3, 4, 5], target=3)

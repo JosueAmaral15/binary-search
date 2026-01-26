@@ -30,13 +30,13 @@ Comprehensive code review completed with **24/24 tests passed**. The binary_sear
 
 **Direct Imports (Backward Compatibility)**
 ```python
-from binary_search import BinaryRateOptimizer, AdamW, BinarySearch
+from math_toolkit.optimization import BinaryRateOptimizer, AdamW, BinarySearch
 ```
 ✓ Status: PASS
 
 **Submodule Imports (New Structure)**
 ```python
-from binary_search.optimizers import BinaryRateOptimizer, AdamW
+from math_toolkit.optimization import BinaryRateOptimizer, AdamW
 from binary_search.algorithms import BinarySearch
 ```
 ✓ Status: PASS
@@ -255,7 +255,7 @@ binary_search/
 
 **Description:**
 Two different BinarySearch classes are accessible:
-- `from binary_search import BinarySearch` → Original version
+- `from math_toolkit.optimization import BinarySearch` → Original version
 - `from binary_search.algorithms import BinarySearch` → Refactored version
 
 **Impact:** LOW
@@ -339,7 +339,7 @@ Two different BinarySearch classes are accessible:
 ### For New Projects (Recommended)
 
 ```python
-from binary_search.optimizers import AdamW
+from math_toolkit.optimization import AdamW
 
 # No learning rate tuning needed!
 optimizer = AdamW(use_binary_search=True, max_iter=100)
@@ -349,7 +349,7 @@ theta = optimizer.optimize(X, y, theta_init, cost_func, grad_func)
 ### For Existing Code (Backward Compatible)
 
 ```python
-from binary_search import BinaryRateOptimizer
+from math_toolkit.optimization import BinaryRateOptimizer
 
 optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-6)
 theta = optimizer.optimize(X, y, theta_init, cost_func, grad_func)

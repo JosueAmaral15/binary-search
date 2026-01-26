@@ -151,7 +151,7 @@ Repeat until convergence:
 ### Example 1: Basic Usage (Beta1 + Beta2)
 
 ```python
-from binary_search.observer_tuning import ObserverAdamW
+from math_toolkit.optimization import ObserverAdamW
 import numpy as np
 
 # Data
