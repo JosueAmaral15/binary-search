@@ -1,32 +1,43 @@
-# Binary Search & Optimization - Unified Package
+# Math Toolkit - Comprehensive Mathematical Optimization Library
 
-**Version 1.1.0** - Modular architecture with new AdamW optimizer
+**Version 2.0.0** - Reorganized package structure with improved cohesion
 
-This repository contains a comprehensive Python package for gradient-based optimization and binary search algorithms, featuring the innovative **AdamW optimizer with binary search learning rate**.
+A comprehensive Python package for mathematical optimization, binary search algorithms, and linear system solvers, featuring innovative binary search paradigms for hyperparameter tuning.
+
+> **⚠️ BREAKING CHANGES:** Package renamed from `binary_search` to `math_toolkit`. See [MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for upgrade instructions. Old imports still work with deprecation warnings.
 
 ---
 
-## 🎯 What's New in v1.1.0
+## 🎯 What's New in v2.0.0
 
-### ⭐ NEW: AdamW Optimizer with Binary Search
-- **Adaptive Moment Estimation** (momentum + adaptive learning rates)
-- **Decoupled Weight Decay** (better than traditional L2 regularization)
-- **Binary Search Learning Rate** - **NO MANUAL TUNING REQUIRED!**
-- Robust convergence across different problem scales
+### 🏗️ **Reorganized Package Structure**
+Package reorganized for better cohesion and discoverability:
 
-### 🏗️ Modular Architecture
 ```
-binary_search/
-├── optimizers.py      # BinaryRateOptimizer + AdamW
-├── algorithms.py      # BinarySearch (search & root finding)
-└── __init__.py        # Unified entry point
+math_toolkit/
+├── binary_search/           # Search algorithms
+│   └── algorithms.py
+├── optimization/            # Gradient-based optimizers
+│   ├── gradient_descent.py
+│   ├── adaptive_optimizer.py
+│   └── observer_tuning.py
+└── linear_systems/          # Linear system solvers
+    └── iterative.py
 ```
 
-### ✅ Production Ready
-- **24/24 tests passed** (comprehensive validation)
-- **Zero critical issues**
-- **Backward compatible** (old imports still work)
-- **Complete documentation** - See [docs/](docs/) folder
+### 📦 **Clear Module Organization**
+- **math_toolkit.binary_search** - Binary search algorithms with tolerance-based comparisons
+- **math_toolkit.optimization** - ML optimizers (BinaryRateOptimizer, AdamW, ObserverAdamW)
+- **math_toolkit.linear_systems** - Iterative linear solvers (BinaryGaussSeidel)
+
+### ✅ **Backward Compatible**
+Old imports still work (with deprecation warnings):
+```python
+# Still works in v2.x
+from binary_search import BinarySearch, BinaryRateOptimizer, AdamW
+```
+
+See [MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for details.
 
 ---
 
@@ -56,7 +67,135 @@ theta = np.linalg.solve(A, b)  # FASTEST - use this!
 
 ---
 
-#### ⚙️ **NON-LINEAR Problems** (custom cost functions, neural networks)
+**Winner: BinaryRateOptimizer** - 10× faster than AdamW
+
+```python
+from math_toolkit.optimization import BinaryRateOptimizer
+
+# For any gradient-based optimization
+optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-6)
+theta = optimizer.optimize(X, y, initial_theta, cost_fn, gradient_fn)
+```
+
+**Use when:**
+- Non-linear optimization
+- Custom/complex cost functions
+- Logistic regression, neural networks
+- Need both speed AND accuracy
+- Large datasets (scales well)
+
+**Alternative: AdamW**
+```python
+from math_toolkit.optimization import AdamW
+
+# When you need per-parameter adaptive learning rates
+optimizer = AdamW(use_binary_search=True, max_iter=100)
+theta = optimizer.optimize(X, y, initial_theta, cost_fn, gradient_fn)
+```
+
+**Use AdamW when:**
+- Deep learning / PyTorch integration
+- Need per-parameter learning rates
+- Small to medium datasets
+
+---
+
+### 📈 Performance Comparison
+
+| Algorithm | Speed | Accuracy | Best For |
+|-----------|-------|----------|----------|
+| **NumPy solve** | ⚡⚡⚡ | 🎯🎯🎯 | Linear systems (Ax=b) |
+| **BinaryRateOptimizer** | ⚡⚡ | 🎯🎯 | Non-linear gradient descent |
+| **AdamW** | ⚡ | 🎯 | Deep learning frameworks |
+
+**Benchmarks:** See [docs/SCALABILITY_BENCHMARK.md](docs/SCALABILITY_BENCHMARK.md) for detailed performance analysis across dataset sizes (5-500 variables).
+
+---
+
+## 📦 Installation
+
+```bash
+# Install from source
+git clone https://github.com/JosueAmaral15/binary-search.git
+cd binary-search
+pip install -e .
+```
+
+---
+
+## 🚀 Quick Start
+
+### Binary Search Algorithms
+
+```python
+from math_toolkit.binary_search import BinarySearch
+
+# Find root: x^2 = 100
+result = BinarySearch.search_for_function(
+    y=100,
+    function=lambda x: x**2,
+    tolerance=1e-6
+)
+print(f"sqrt(100) = {result}")  # 10.0
+```
+
+### Gradient Descent Optimization
+
+```python
+import numpy as np
+from math_toolkit.optimization import BinaryRateOptimizer
+
+# Define your problem
+def cost(theta, X, y):
+    return np.mean((X @ theta - y) ** 2)
+
+def gradient(theta, X, y):
+    return 2 * X.T @ (X @ theta - y) / len(y)
+
+# Optimize - NO LEARNING RATE TUNING NEEDED!
+optimizer = BinaryRateOptimizer(max_iter=50, tol=1e-6)
+X, y = ...  # Your data
+theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
+```
+
+### AdamW Optimizer
+
+```python
+from math_toolkit.optimization import AdamW
+
+optimizer = AdamW(use_binary_search=True, max_iter=100)
+theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
+```
+
+### Linear System Solver
+
+```python
+from math_toolkit.linear_systems import BinaryGaussSeidel
+
+solver = BinaryGaussSeidel(max_iterations=1000, tolerance=1e-6)
+x = solver.solve(A, b)
+```
+
+---
+
+## 📚 What's Included
+
+### 1. **Binary Search Algorithms** (`math_toolkit.binary_search`)
+- **BinarySearch**: Advanced search with tolerance-based comparisons
+- Array search, function root finding, stepped search
+- Mathematical comparison functions
+
+### 2. **Optimization Algorithms** (`math_toolkit.optimization`)
+- **BinaryRateOptimizer**: Gradient descent with binary search learning rate (10× faster than AdamW)
+- **AdamW**: Adaptive moment estimation with weight decay and binary search
+- **ObserverAdamW**: Parallel hyperparameter tuning with observer pattern
+
+### 3. **Linear System Solvers** (`math_toolkit.linear_systems`)
+- **BinaryGaussSeidel**: Iterative solver with binary search optimizations
+- Polynomial regression support
+- Large system optimization (10×10 to 100×100)
+
+---
 
 **Winner: BinaryRateOptimizer** - 10× faster than AdamW
 
