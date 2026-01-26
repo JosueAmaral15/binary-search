@@ -500,7 +500,22 @@ class AdamW:
             
         Returns:
             np.ndarray: Optimized parameters
+            
+        Raises:
+            ValueError: If inputs are invalid
         """
+        # Input validation
+        if not isinstance(X, np.ndarray) or not isinstance(y, np.ndarray):
+            raise ValueError("X and y must be numpy arrays")
+        if not isinstance(initial_theta, np.ndarray):
+            raise ValueError("initial_theta must be a numpy array")
+        if len(X) != len(y):
+            raise ValueError("X and y must have same length")
+        if not np.all(np.isfinite(X)) or not np.all(np.isfinite(y)):
+            raise ValueError("X and y must not contain NaN or Inf")
+        if not np.all(np.isfinite(initial_theta)):
+            raise ValueError("initial_theta must not contain NaN or Inf")
+        
         theta = initial_theta.copy()
         self._initialize_state(theta)
         

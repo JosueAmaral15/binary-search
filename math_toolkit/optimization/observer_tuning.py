@@ -95,7 +95,10 @@ class HyperparameterProcess:
                 self.narrow_range(best_value)
                 self.iteration += 1
                 
-            except:
+            except Exception as e:
+                # Catch normal exceptions (Queue.Empty, KeyError, etc.)
+                # but allow KeyboardInterrupt and SystemExit to propagate
+                print(f"Warning: Error in hyperparameter process {self.name}: {e}")
                 break
 
 
