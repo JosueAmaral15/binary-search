@@ -21,14 +21,15 @@ math_toolkit/
 │   ├── gradient_descent.py
 │   ├── adaptive_optimizer.py
 │   └── observer_tuning.py
-└── linear_systems/          # Linear system solvers
-    └── iterative.py
+└── linear_systems/          # Linear & nonlinear system solvers
+    ├── iterative.py
+    └── nonlinear.py
 ```
 
 ### 📦 **Clear Module Organization**
 - **math_toolkit.binary_search** - Binary search algorithms with tolerance-based comparisons
 - **math_toolkit.optimization** - ML optimizers (BinaryRateOptimizer, AdamW, ObserverAdamW)
-- **math_toolkit.linear_systems** - Iterative linear solvers (BinaryGaussSeidel)
+- **math_toolkit.linear_systems** - Iterative solvers (BinaryGaussSeidel, NonLinearGaussSeidel)
 
 ### ✅ **Backward Compatible**
 Old imports still work (with deprecation warnings):
@@ -172,8 +173,24 @@ theta = optimizer.optimize(X, y, initial_theta, cost, gradient)
 ```python
 from math_toolkit.linear_systems import BinaryGaussSeidel
 
+# Solve Ax = b iteratively
 solver = BinaryGaussSeidel(max_iterations=1000, tolerance=1e-6)
-x = solver.solve(A, b)
+result = solver.solve(A, b)
+```
+
+### Nonlinear System Solver
+
+```python
+from math_toolkit.linear_systems import NonLinearGaussSeidel
+
+# Solve F(x) = 0 (no derivatives needed!)
+# Example: x² + y - 11 = 0, x + y² - 7 = 0
+f1 = lambda x, y: x**2 + y - 11
+f2 = lambda x, y: x + y**2 - 7
+
+solver = NonLinearGaussSeidel(functions=[f1, f2])
+result = solver.solve(initial_guess=[0, 0])
+print(f"Solution: x={result.x[0]:.4f}, y={result.x[1]:.4f}")  # x=3, y=2
 ```
 
 ---
@@ -191,9 +208,14 @@ x = solver.solve(A, b)
 - **ObserverAdamW**: Parallel hyperparameter tuning with observer pattern
 
 ### 3. **Linear System Solvers** (`math_toolkit.linear_systems`)
-- **BinaryGaussSeidel**: Iterative solver with binary search optimizations
-- Polynomial regression support
-- Large system optimization (10×10 to 100×100)
+- **BinaryGaussSeidel**: Iterative solver for linear systems (Ax = b)
+  - Polynomial regression support
+  - Large system optimization (10×10 to 100×100)
+- **NonLinearGaussSeidel**: Solver for nonlinear systems F(x) = 0
+  - **No derivatives needed** - uses binary search for root finding
+  - Robust error handling for domain errors
+  - Works with transcendental, exponential, trigonometric functions
+  - Solves 1D, 2D, 3D, ..., N-D systems
 
 ---
 
