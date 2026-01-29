@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from math_toolkit.linear_systems import BinaryGaussSeidel, solve_linear_system
+from math_toolkit.linear_systems import BinaryGaussSeidel
 
 
 def test_classic_3x3_system():
