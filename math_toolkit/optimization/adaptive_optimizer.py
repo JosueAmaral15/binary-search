@@ -9,8 +9,11 @@ Classes:
 """
 
 import numpy as np
+import logging
 from typing import Callable, Dict, List, Optional, Tuple
 from math import isfinite
+
+logger = logging.getLogger(__name__)
 
 class AdamW:
     """
@@ -281,7 +284,7 @@ class AdamW:
         best_cost = float('inf')
         
         if self.verbose:
-            print(f"\n  Auto-tuning {param_name} in range {param_range}...")
+            logger.info(f"\n  Auto-tuning {param_name} in range {param_range}...")
         
         # Binary search for optimal value
         for search_iter in range(search_steps):
@@ -344,7 +347,7 @@ class AdamW:
                 high = min(high, param_range[1])
         
         if self.verbose:
-            print(f"    → Optimal {param_name}: {best_value:.6f} (cost after 5 iters: {best_cost:.6f})")
+            logger.info(f"    → Optimal {param_name}: {best_value:.6f} (cost after 5 iters: {best_cost:.6f})")
         
         return best_value
     
@@ -533,13 +536,13 @@ class AdamW:
         self.history["grad_norm"].append(0.0)
         
         if self.verbose:
-            print("--- Starting AdamW Optimization ---")
-            print(f"Initial Cost: {initial_cost:.6f}")
-            print(f"Binary Search: {'Enabled' if self.use_binary_search else 'Disabled'}")
-            print(f"Parameters: {n_params}")
-            print(f"Strategy: {strategy['strategy_name']}")
-            print(f"Binary search steps: {binary_search_steps_to_use}")
-            print(f"Expansion factor: {expansion_factor_to_use}")
+            logger.info("--- Starting AdamW Optimization ---")
+            logger.info(f"Initial Cost: {initial_cost:.6f}")
+            logger.info(f"Binary Search: {'Enabled' if self.use_binary_search else 'Disabled'}")
+            logger.info(f"Parameters: {n_params}")
+            logger.info(f"Strategy: {strategy['strategy_name']}")
+            logger.info(f"Binary search steps: {binary_search_steps_to_use}")
+            logger.info(f"Expansion factor: {expansion_factor_to_use}")
         
         # Store strategy config for use in _find_optimal_learning_rate
         self._current_binary_search_steps = binary_search_steps_to_use
@@ -573,7 +576,7 @@ class AdamW:
             hyperparams_tuned.append(f"weight_decay={self.weight_decay:.6f}")
         
         if hyperparams_tuned and self.verbose:
-            print(f"\n✅ Hyperparameters auto-tuned: {', '.join(hyperparams_tuned)}\n")
+            logger.info(f"\n✅ Hyperparameters auto-tuned: {', '.join(hyperparams_tuned)}\n")
         
         # Reinitialize state after hyperparameter tuning
         self._initialize_state(theta)
@@ -586,7 +589,7 @@ class AdamW:
             # Check for convergence
             if grad_norm < 1e-9:
                 if self.verbose:
-                    print("Gradient norm close to zero. Convergence reached.")
+                    logger.info("Gradient norm close to zero. Convergence reached.")
                 break
             
             # 2. Compute Adam direction
@@ -611,12 +614,12 @@ class AdamW:
             self.history["grad_norm"].append(grad_norm)
             
             if self.verbose:
-                print(f"Iter {i+1:03d}: LR={lr:.6e} | Cost={new_cost:.8f} | Grad={grad_norm:.6e}")
+                logger.info(f"Iter {i+1:03d}: LR={lr:.6e} | Cost={new_cost:.8f} | Grad={grad_norm:.6e}")
             
             # 5. Check convergence
             if abs(self.history["cost"][-2] - new_cost) < self.tol:
                 if self.verbose:
-                    print(f"Convergence reached by tolerance ({self.tol}) at iter {i+1}.")
+                    logger.info(f"Convergence reached by tolerance ({self.tol}) at iter {i+1}.")
                 break
             
             theta = theta_new
