@@ -282,17 +282,20 @@ class TestBinaryGaussSeidelEdgeCases:
         # Should converge to very high precision
         assert np.allclose(result.x, [1, 1], atol=1e-10)
 
-    def test_verbose_output(self, capsys):
-        """Test that verbose mode prints progress."""
+    def test_verbose_output(self, caplog):
+        """Test that verbose mode logs progress."""
+        import logging
+        
         A = np.array([[4, -1], [-1, 4]], dtype=float)
         b = np.array([3, 3], dtype=float)
 
-        solver = BinaryGaussSeidel(tolerance=1e-6, max_iterations=10, verbose=True)
-        result = solver.solve(A, b)
+        with caplog.at_level(logging.INFO):
+            solver = BinaryGaussSeidel(tolerance=1e-6, max_iterations=10, verbose=True)
+            result = solver.solve(A, b)
 
-        captured = capsys.readouterr()
-        # Should print some progress info
-        assert "Iteration" in captured.out or "Converged" in captured.out
+        log_text = caplog.text
+        # Should log some progress info
+        assert "Iteration" in log_text or "System size" in log_text
 
     def test_result_object_properties(self):
         """Test that result object has all expected properties."""

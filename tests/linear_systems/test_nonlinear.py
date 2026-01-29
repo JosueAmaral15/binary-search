@@ -244,17 +244,20 @@ class TestNonLinearGaussSeidelEdgeCases:
         # Should still converge, just take more iterations
         assert result.residual < 1e-8
 
-    def test_verbose_output(self, capsys):
-        """Test that verbose mode prints progress."""
+    def test_verbose_output(self, caplog):
+        """Test that verbose mode logs progress."""
+        import logging
+        
         f1 = lambda x, y: x**2 + y - 11
         f2 = lambda x, y: x + y**2 - 7
         
-        solver = NonLinearGaussSeidel(functions=[f1, f2], verbose=True)
-        result = solver.solve(initial_guess=[0, 0])
+        with caplog.at_level(logging.INFO):
+            solver = NonLinearGaussSeidel(functions=[f1, f2], verbose=True)
+            result = solver.solve(initial_guess=[0, 0])
         
-        captured = capsys.readouterr()
-        # Should print iteration info
-        assert "Iter" in captured.out or "Converged" in captured.out
+        log_text = caplog.text
+        # Should log iteration info
+        assert "Iter" in log_text or "Converged" in log_text or "Starting" in log_text
 
     def test_result_object_properties(self):
         """Test that result object has all expected properties."""

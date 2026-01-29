@@ -6,8 +6,11 @@ Phase 1: Minimal prototype with core functionality.
 """
 
 import numpy as np
+import logging
 import warnings
 from typing import Optional, Tuple, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 
 class SolverResult:
@@ -298,9 +301,9 @@ class BinaryGaussSeidel:
         omega_search_iters = strategy['omega_search_iterations']
         
         if self.verbose:
-            print(f"System size: {n}×{n}")
-            print(f"Strategy: {strategy['strategy_name']}")
-            print(f"Omega search iterations: {omega_search_iters}")
+            logger.info(f"System size: {n}×{n}")
+            logger.info(f"Strategy: {strategy['strategy_name']}")
+            logger.info(f"Omega search iterations: {omega_search_iters}")
         
         if b.shape != (n,):
             raise ValueError(f"b must have shape ({n},), got {b.shape}")
@@ -376,7 +379,7 @@ class BinaryGaussSeidel:
             residual = self._compute_residual(A, x, b)
             
             if self.verbose:
-                print(f"Iteration {iteration + 1}: "
+                logger.info(f"Iteration {iteration + 1}: "
                       f"rel_change={relative_change:.2e}, residual={residual:.2e}")
             
             # Converged if EITHER criterion is satisfied
@@ -675,8 +678,8 @@ class BinaryGaussSeidel:
         ATy = A_vandermonde.T @ y_data
         
         if self.verbose:
-            print(f"Polynomial regression: degree={degree}, data_points={m}")
-            print(f"Solving normal equations: {n}×{n} system")
+            logger.info(f"Polynomial regression: degree={degree}, data_points={m}")
+            logger.info(f"Solving normal equations: {n}×{n} system")
         
         # Solve using Gauss-Seidel
         result = self._solve_linear_system(ATA, ATy, x0, optimization_priority, None)

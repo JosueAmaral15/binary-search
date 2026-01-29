@@ -11,8 +11,11 @@ This extends the binary search paradigm to nonlinear equation solving:
 """
 
 import numpy as np
+import logging
 import warnings
 from typing import Callable, List, Tuple, Optional, Union
+
+logger = logging.getLogger(__name__)
 
 
 class NonLinearResult:
@@ -316,8 +319,8 @@ class NonLinearGaussSeidel:
         warnings_list = []
         
         if self.verbose:
-            print(f"Starting NonLinear Gauss-Seidel (n={self.n})")
-            print(f"Initial residual: {self._compute_residual(x):.2e}")
+            logger.info(f"Starting NonLinear Gauss-Seidel (n={self.n})")
+            logger.info(f"Initial residual: {self._compute_residual(x):.2e}")
         
         # Main Gauss-Seidel iteration
         for iteration in range(self.max_iterations):
@@ -341,13 +344,13 @@ class NonLinearGaussSeidel:
             residual = self._compute_residual(x)
             
             if self.verbose:
-                print(f"Iter {iteration+1:3d}: residual={residual:.2e}, "
+                logger.info(f"Iter {iteration+1:3d}: residual={residual:.2e}, "
                       f"rel_change={relative_change:.2e}")
             
             # Check convergence
             if relative_change < self.tolerance and residual < self.tolerance:
                 if self.verbose:
-                    print(f"✓ Converged in {iteration+1} iterations")
+                    logger.info(f"✓ Converged in {iteration+1} iterations")
                 
                 return NonLinearResult(
                     x=x,
@@ -363,7 +366,7 @@ class NonLinearGaussSeidel:
         warnings_list.append("Maximum iterations reached without full convergence")
         
         if self.verbose:
-            print(f"⚠ Max iterations ({self.max_iterations}) reached")
+            logger.info(f"⚠ Max iterations ({self.max_iterations}) reached")
         
         return NonLinearResult(
             x=x,
