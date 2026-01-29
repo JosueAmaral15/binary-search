@@ -10,8 +10,11 @@ Classes:
 """
 
 import numpy as np
+import logging
 from typing import Callable, Dict, List, Optional, Tuple
 from math import isfinite
+
+logger = logging.getLogger(__name__)
 
 
 class BinaryRateOptimizer:
@@ -211,8 +214,8 @@ class BinaryRateOptimizer:
         self.history["alpha"].append(0.0)
 
         if self.verbose:
-            print(f"--- Starting BR-GD Optimization ---")
-            print(f"Initial Cost: {initial_cost:.6f}")
+            logger.info("--- Starting BR-GD Optimization ---")
+            logger.info(f"Initial Cost: {initial_cost:.6f}")
 
         for i in range(self.max_iter):
             # 1. Calculate Gradient
@@ -221,7 +224,7 @@ class BinaryRateOptimizer:
             # Safety check for zero gradient
             if np.all(np.abs(grad) < 1e-9):
                 if self.verbose:
-                    print("Gradient close to zero. Convergence reached.")
+                    logger.info("Gradient close to zero. Convergence reached.")
                 break
 
             # 2. Find optimal alpha (Binary Search)
@@ -237,12 +240,12 @@ class BinaryRateOptimizer:
             self.history["alpha"].append(optimal_alpha)
             
             if self.verbose:
-                print(f"Iter {i+1:03d}: Alpha={optimal_alpha:.6f} | Cost={new_cost:.8f}")
+                logger.info(f"Iter {i+1:03d}: Alpha={optimal_alpha:.6f} | Cost={new_cost:.8f}")
 
             # 4. Stopping criterion (tolerance)
             if abs(self.history["cost"][-2] - new_cost) < self.tol:
                 if self.verbose:
-                    print(f"Convergence reached by tolerance ({self.tol}) at iter {i+1}.")
+                    logger.info(f"Convergence reached by tolerance ({self.tol}) at iter {i+1}.")
                 break
                 
             theta = theta_new
