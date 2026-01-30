@@ -80,7 +80,8 @@ class AdamW:
         beta1_range: Tuple[float, float] = (0.8, 0.99),
         beta2_range: Tuple[float, float] = (0.9, 0.9999),
         epsilon_range: Tuple[float, float] = (1e-10, 1e-6),
-        weight_decay_range: Tuple[float, float] = (0.0, 0.1)
+        weight_decay_range: Tuple[float, float] = (0.0, 0.1),
+        bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None
     ):
         """
         Initialize AdamW optimizer with hyperparameter auto-tuning.
@@ -98,6 +99,11 @@ class AdamW:
             binary_search_steps: Number of binary search refinements (default strategy)
             verbose: Print optimization progress
             enable_size_optimization: Enable automatic strategy switching based on parameter count
+            bounds: Optional box constraints as (lower, upper) tuple where:
+                - lower: array of lower bounds (or scalar for all parameters)
+                - upper: array of upper bounds (or scalar for all parameters)
+                Example: bounds=(0, 1) constrains all params to [0, 1]
+                Example: bounds=(np.array([0, -10]), np.array([1, 10]))
             max_parameter_count: Maximum parameter count hint (None = auto-detect)
             auto_tune_strategy: 'adaptive' (auto-choose), 'aggressive' (small models), 
                                'conservative' (large models)
@@ -135,6 +141,14 @@ class AdamW:
             raise ValueError(f"epsilon_range must be (low, high) with 0 < low < high, got {epsilon_range}")
         if weight_decay_range[0] >= weight_decay_range[1] or weight_decay_range[0] < 0:
             raise ValueError(f"weight_decay_range must be (low, high) with 0 <= low < high, got {weight_decay_range}")
+        
+        # Validate bounds if provided
+        if bounds is not None:
+            if not isinstance(bounds, tuple) or len(bounds) != 2:
+                raise ValueError("bounds must be a tuple of (lower, upper)")
+            lower, upper = bounds
+            if np.any(lower >= upper):
+                raise ValueError("lower bounds must be < upper bounds")
             
         self.max_iter = max_iter
         self.beta1 = beta1
@@ -147,6 +161,7 @@ class AdamW:
         self.expansion_factor = expansion_factor
         self.binary_search_steps = binary_search_steps
         self.verbose = verbose
+        self.bounds = bounds  # Box constraints
         
         # Size optimization parameters
         self.enable_size_optimization = enable_size_optimization
@@ -175,6 +190,34 @@ class AdamW:
             "lr": [],
             "grad_norm": []
         }
+    
+    def _project_to_bounds(self, theta: np.ndarray) -> np.ndarray:
+        """
+        Project parameters to feasible region (box constraints).
+        
+        Args:
+            theta: Parameter vector to project
+            
+        Returns:
+            Projected parameter vector within bounds
+        """
+        if self.bounds is None:
+            return theta
+        
+        lower, upper = self.bounds
+        
+        # Convert scalars to arrays if needed
+        lower = np.atleast_1d(lower)
+        upper = np.atleast_1d(upper)
+        
+        # Broadcast to match theta shape if needed
+        if lower.shape[0] == 1 and theta.shape[0] > 1:
+            lower = np.full_like(theta, lower[0])
+        if upper.shape[0] == 1 and theta.shape[0] > 1:
+            upper = np.full_like(theta, upper[0])
+        
+        # Clip to bounds
+        return np.clip(theta, lower, upper)
     
     def _determine_strategy(self, n_params: int) -> dict:
         """
@@ -406,9 +449,10 @@ class AdamW:
         Returns:
             float: Projected cost
         """
-        # Adam update with weight decay
+        # Adam update with weight decay + projection
         theta_temp = current_theta - lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
         theta_temp -= lr * self.weight_decay * current_theta  # Weight decay
+        theta_temp = self._project_to_bounds(theta_temp)  # Project to bounds
         
         return cost_func(theta_temp, X, y)
     
@@ -520,6 +564,10 @@ class AdamW:
             raise ValueError("initial_theta must not contain NaN or Inf")
         
         theta = initial_theta.copy()
+        
+        # Project initial guess to bounds if needed
+        theta = self._project_to_bounds(theta)
+        
         self._initialize_state(theta)
         
         # NEW: Determine strategy based on parameter count
@@ -543,6 +591,8 @@ class AdamW:
             logger.info(f"Strategy: {strategy['strategy_name']}")
             logger.info(f"Binary search steps: {binary_search_steps_to_use}")
             logger.info(f"Expansion factor: {expansion_factor_to_use}")
+            if self.bounds is not None:
+                logger.info("Box constraints enabled")
         
         # Store strategy config for use in _find_optimal_learning_rate
         self._current_binary_search_steps = binary_search_steps_to_use
@@ -601,9 +651,10 @@ class AdamW:
             else:
                 lr = self.base_lr
             
-            # 4. Update parameters (Adam + weight decay)
+            # 4. Update parameters (Adam + weight decay + projection)
             theta_new = theta - lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
             theta_new -= lr * self.weight_decay * theta  # Decoupled weight decay
+            theta_new = self._project_to_bounds(theta_new)  # Project to bounds
             
             new_cost = cost_func(theta_new, X, y)
             

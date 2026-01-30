@@ -58,7 +58,8 @@ class BinaryRateOptimizer:
         tol: float = 1e-6,
         expansion_factor: float = 2.0,
         binary_search_steps: int = 10,
-        verbose: bool = True
+        verbose: bool = True,
+        bounds: Optional[Tuple[np.ndarray, np.ndarray]] = None
     ):
         """
         Initialize the Binary Rate Optimizer.
@@ -69,6 +70,11 @@ class BinaryRateOptimizer:
             expansion_factor: Multiplier used during alpha expansion phase
             binary_search_steps: Number of binary subdivisions to refine alpha
             verbose: If True, print optimization progress
+            bounds: Optional box constraints as (lower, upper) tuple where:
+                - lower: array of lower bounds (or scalar for all parameters)
+                - upper: array of upper bounds (or scalar for all parameters)
+                Example: bounds=(0, 1) constrains all params to [0, 1]
+                Example: bounds=(np.array([0, -10]), np.array([1, 10]))
             
         Raises:
             ValueError: If parameters are invalid
@@ -82,12 +88,21 @@ class BinaryRateOptimizer:
             raise ValueError("expansion_factor must be > 1.0")
         if binary_search_steps <= 0:
             raise ValueError("binary_search_steps must be positive")
+        
+        # Validate bounds if provided
+        if bounds is not None:
+            if not isinstance(bounds, tuple) or len(bounds) != 2:
+                raise ValueError("bounds must be a tuple of (lower, upper)")
+            lower, upper = bounds
+            if np.any(lower >= upper):
+                raise ValueError("lower bounds must be < upper bounds")
             
         self.max_iter = max_iter
         self.tol = tol
         self.expansion_factor = expansion_factor
         self.binary_search_steps = binary_search_steps
         self.verbose = verbose
+        self.bounds = bounds
         
         # History for plotting/debugging
         self.history: Dict[str, List] = {
@@ -95,6 +110,34 @@ class BinaryRateOptimizer:
             "cost": [],
             "alpha": []
         }
+    
+    def _project_to_bounds(self, theta: np.ndarray) -> np.ndarray:
+        """
+        Project parameters to feasible region (box constraints).
+        
+        Args:
+            theta: Parameter vector to project
+            
+        Returns:
+            Projected parameter vector within bounds
+        """
+        if self.bounds is None:
+            return theta
+        
+        lower, upper = self.bounds
+        
+        # Convert scalars to arrays if needed
+        lower = np.atleast_1d(lower)
+        upper = np.atleast_1d(upper)
+        
+        # Broadcast to match theta shape if needed
+        if lower.shape[0] == 1 and theta.shape[0] > 1:
+            lower = np.full_like(theta, lower[0])
+        if upper.shape[0] == 1 and theta.shape[0] > 1:
+            upper = np.full_like(theta, upper[0])
+        
+        # Clip to bounds
+        return np.clip(theta, lower, upper)
 
     def _get_loss_at_step(
         self,
@@ -107,6 +150,7 @@ class BinaryRateOptimizer:
     ) -> float:
         """Calculate projected cost if we take a step of size alpha."""
         theta_temp = current_theta - alpha * gradient
+        theta_temp = self._project_to_bounds(theta_temp)  # Project to bounds
         return cost_func(theta_temp, X, y)
 
     def _find_optimal_learning_rate(
@@ -207,6 +251,9 @@ class BinaryRateOptimizer:
             
         theta = initial_theta.copy()
         
+        # Project initial guess to bounds if needed
+        theta = self._project_to_bounds(theta)
+        
         # Save initial state
         initial_cost = cost_func(theta, X, y)
         self.history["theta"].append(theta.copy())
@@ -216,6 +263,8 @@ class BinaryRateOptimizer:
         if self.verbose:
             logger.info("--- Starting BR-GD Optimization ---")
             logger.info(f"Initial Cost: {initial_cost:.6f}")
+            if self.bounds is not None:
+                logger.info("Box constraints enabled")
 
         for i in range(self.max_iter):
             # 1. Calculate Gradient
@@ -230,8 +279,9 @@ class BinaryRateOptimizer:
             # 2. Find optimal alpha (Binary Search)
             optimal_alpha = self._find_optimal_learning_rate(theta, grad, X, y, cost_func)
             
-            # 3. Update weights
+            # 3. Update weights with projection
             theta_new = theta - optimal_alpha * grad
+            theta_new = self._project_to_bounds(theta_new)  # Project to bounds
             new_cost = cost_func(theta_new, X, y)
             
             # Update history
