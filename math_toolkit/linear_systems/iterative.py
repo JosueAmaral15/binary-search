@@ -10,6 +10,14 @@ import logging
 import warnings
 from typing import Optional, Tuple, Dict, Any
 
+# Sparse matrix support (optional dependency)
+try:
+    import scipy.sparse as sp
+    SPARSE_AVAILABLE = True
+except ImportError:
+    SPARSE_AVAILABLE = False
+    sp = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -280,13 +288,14 @@ class BinaryGaussSeidel:
         
         This is the core solver that was previously in solve().
         Now refactored to support new features while maintaining compatibility.
+        Automatically detects and optimizes for sparse matrices.
         """
-        """
-        Internal method: Solve linear system with size optimization.
+        # Detect sparse matrices and route to optimized solver
+        if SPARSE_AVAILABLE and sp.issparse(A):
+            logger.info(f"Sparse matrix detected: {type(A).__name__}, using optimized sparse solver")
+            return self._solve_sparse(A, b, x0, optimization_priority)
         
-        This is the core solver that was previously in solve().
-        Now refactored to support new features while maintaining compatibility.
-        """
+        # Convert to dense numpy arrays for dense solver
         A = np.asarray(A, dtype=float)
         b = np.asarray(b, dtype=float)
         
@@ -408,6 +417,249 @@ class BinaryGaussSeidel:
             converged=False,
             warnings_list=warnings_list
         )
+    
+    def _solve_sparse(self, A, b: np.ndarray, 
+                     x0: Optional[np.ndarray],
+                     optimization_priority: str) -> SolverResult:
+        """
+        Optimized solver for sparse matrices using CSR format.
+        
+        Key optimizations for sparse matrices:
+        1. Convert to CSR (Compressed Sparse Row) for fast row access
+        2. Avoid dense operations (no full matrix @ vector)
+        3. Use sparse.dot() for efficient sparse-dense multiplication
+        4. Only iterate over non-zero elements
+        
+        Parameters
+        ----------
+        A : scipy.sparse matrix
+            Sparse coefficient matrix (any scipy.sparse format)
+        b : np.ndarray
+            Dense right-hand side vector
+        x0 : np.ndarray, optional
+            Initial guess
+        optimization_priority : str
+            Optimization priority (inherited from main solve)
+        
+        Returns
+        -------
+        SolverResult
+            Solution with convergence metadata
+        """
+        # Convert to CSR format for efficient row-wise operations
+        if not sp.isspmatrix_csr(A):
+            logger.info(f"Converting {type(A).__name__} to CSR format for optimization")
+            A = A.tocsr()
+        
+        b = np.asarray(b, dtype=float)
+        
+        # Validate inputs
+        if A.shape[0] != A.shape[1]:
+            raise ValueError(f"A must be square matrix, got shape {A.shape}")
+        
+        n = A.shape[0]
+        
+        if b.shape != (n,):
+            raise ValueError(f"b must have shape ({n},), got {b.shape}")
+        
+        # Extract diagonal for checking and iteration
+        diagonal = A.diagonal()
+        
+        if np.any(np.abs(diagonal) < 1e-14):
+            raise ValueError("Matrix has zero or near-zero diagonal elements. "
+                           "Gauss-Seidel cannot proceed.")
+        
+        # Initialize solution vector
+        if x0 is None:
+            x = np.zeros(n, dtype=float)
+        else:
+            x0 = np.asarray(x0, dtype=float)
+            if x0.shape != (n,):
+                raise ValueError(f"x0 must have shape ({n},), got {x0.shape}")
+            x = x0.copy()
+        
+        # Determine strategy based on matrix size
+        strategy = self._determine_strategy(n)
+        omega_search_iters = strategy['omega_search_iterations']
+        
+        # Calculate sparsity for logging
+        sparsity = 1.0 - (A.nnz / (n * n))
+        
+        if self.verbose:
+            logger.info(f"Sparse system: {n}×{n}, {A.nnz} non-zeros ({sparsity*100:.1f}% sparse)")
+            logger.info(f"Strategy: {strategy['strategy_name']}")
+            logger.info(f"Omega search iterations: {omega_search_iters}")
+        
+        # Check diagonal dominance (sparse-aware)
+        warnings_list = []
+        if self.check_dominance:
+            if not self._is_sparse_diagonally_dominant(A, diagonal):
+                msg = ("Matrix is not strictly diagonally dominant. "
+                      "Convergence is not guaranteed.")
+                warnings.warn(msg, UserWarning)
+                warnings_list.append(msg)
+        
+        # Gauss-Seidel iteration with sparse optimization
+        x_old = x.copy()
+        omega_cache = 1.0
+        should_use_binary_search = self.auto_tune_omega
+        
+        for iteration in range(self.max_iterations):
+            # Adaptive decision to disable binary search if convergence fast
+            if iteration == 3 and self.auto_tune_omega:
+                relative_change = self._compute_relative_change(x, x_old)
+                if relative_change < 0.1:
+                    should_use_binary_search = False
+            
+            # Binary search for optimal omega
+            if should_use_binary_search:
+                if iteration < 3:
+                    omega_cache = self._find_adaptive_omega_sparse(
+                        A, b, x, x_old, n, diagonal, search_iterations=omega_search_iters
+                    )
+                omega = omega_cache
+            else:
+                omega = 1.0
+            
+            x_iteration_start = x.copy()
+            
+            # Update each component using sparse row operations
+            for i in range(n):
+                # Get row i data efficiently from CSR format
+                row_start = A.indptr[i]
+                row_end = A.indptr[i + 1]
+                row_indices = A.indices[row_start:row_end]
+                row_data = A.data[row_start:row_end]
+                
+                # Compute sum using only non-zero elements
+                row_sum = 0.0
+                for j_idx, col_j in enumerate(row_indices):
+                    if col_j != i:
+                        row_sum += row_data[j_idx] * x[col_j]
+                
+                # Gauss-Seidel update
+                x_gs = (b[i] - row_sum) / diagonal[i]
+                
+                # Apply relaxation
+                x[i] = omega * x_gs + (1 - omega) * x_iteration_start[i]
+            
+            # Check convergence
+            relative_change = self._compute_relative_change(x, x_old)
+            residual = self._compute_sparse_residual(A, x, b)
+            
+            if self.verbose:
+                logger.info(f"Iteration {iteration + 1}: "
+                      f"rel_change={relative_change:.2e}, residual={residual:.2e}")
+            
+            if relative_change < self.tolerance or residual < self.tolerance:
+                return SolverResult(
+                    x=x,
+                    iterations=iteration + 1,
+                    residual=residual,
+                    relative_change=relative_change,
+                    converged=True,
+                    warnings_list=warnings_list
+                )
+            
+            x_old = x.copy()
+        
+        # Max iterations reached
+        final_residual = self._compute_sparse_residual(A, x, b)
+        final_change = self._compute_relative_change(x, x_old)
+        
+        return SolverResult(
+            x=x,
+            iterations=self.max_iterations,
+            residual=final_residual,
+            relative_change=final_change,
+            converged=False,
+            warnings_list=warnings_list
+        )
+    
+    def _is_sparse_diagonally_dominant(self, A, diagonal: np.ndarray) -> bool:
+        """
+        Check diagonal dominance for sparse matrix.
+        
+        Optimized for CSR format - iterates only over non-zero elements.
+        """
+        n = A.shape[0]
+        for i in range(n):
+            row_start = A.indptr[i]
+            row_end = A.indptr[i + 1]
+            row_data = A.data[row_start:row_end]
+            row_indices = A.indices[row_start:row_end]
+            
+            # Sum absolute values of off-diagonal elements
+            off_diagonal_sum = 0.0
+            for j_idx, col_j in enumerate(row_indices):
+                if col_j != i:
+                    off_diagonal_sum += np.abs(row_data[j_idx])
+            
+            if np.abs(diagonal[i]) <= off_diagonal_sum:
+                return False
+        
+        return True
+    
+    def _compute_sparse_residual(self, A, x: np.ndarray, b: np.ndarray) -> float:
+        """
+        Compute residual ||Ax - b||₂ for sparse matrix.
+        
+        Uses sparse matrix-vector multiplication.
+        """
+        return np.linalg.norm(A.dot(x) - b)
+    
+    def _find_adaptive_omega_sparse(self, A, b: np.ndarray, x_current: np.ndarray,
+                                   x_previous: np.ndarray, n: int, diagonal: np.ndarray,
+                                   search_iterations: int = 5) -> float:
+        """
+        Binary search for optimal omega for sparse matrices.
+        
+        Similar to dense version but uses sparse operations.
+        """
+        omega_low = 0.5
+        omega_high = 1.95
+        best_omega = 1.0
+        best_residual = float('inf')
+        
+        for _ in range(search_iterations):
+            omega_mid = (omega_low + omega_high) / 2.0
+            
+            # Test three omega values
+            for omega_test in [omega_low, omega_mid, omega_high]:
+                x_test = x_current.copy()
+                
+                # One Gauss-Seidel sweep with omega_test
+                for i in range(n):
+                    row_start = A.indptr[i]
+                    row_end = A.indptr[i + 1]
+                    row_indices = A.indices[row_start:row_end]
+                    row_data = A.data[row_start:row_end]
+                    
+                    row_sum = 0.0
+                    for j_idx, col_j in enumerate(row_indices):
+                        if col_j != i:
+                            row_sum += row_data[j_idx] * x_test[col_j]
+                    
+                    x_gs = (b[i] - row_sum) / diagonal[i]
+                    x_test[i] = omega_test * x_gs + (1 - omega_test) * x_current[i]
+                
+                # Compute residual
+                residual = self._compute_sparse_residual(A, x_test, b)
+                
+                if residual < best_residual:
+                    best_residual = residual
+                    best_omega = omega_test
+            
+            # Narrow search range
+            if abs(best_omega - omega_low) < 0.01:
+                omega_high = omega_mid
+            elif abs(best_omega - omega_high) < 0.01:
+                omega_low = omega_mid
+            else:
+                omega_low = omega_mid - 0.2
+                omega_high = omega_mid + 0.2
+        
+        return best_omega
     
     def _is_diagonally_dominant(self, A: np.ndarray) -> bool:
         """
