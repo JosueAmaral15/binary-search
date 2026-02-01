@@ -16,7 +16,8 @@ Package reorganized for better cohesion and discoverability:
 ```
 math_toolkit/
 ├── binary_search/           # Search algorithms
-│   └── algorithms.py
+│   ├── algorithms.py        # BinarySearch
+│   └── combinatorial.py     # WeightCombinationSearch (NEW!)
 ├── optimization/            # Gradient-based optimizers
 │   ├── gradient_descent.py
 │   ├── adaptive_optimizer.py
@@ -25,6 +26,24 @@ math_toolkit/
     ├── iterative.py
     └── nonlinear.py
 ```
+
+### 🆕 **New: WeightCombinationSearch**
+Find optimal weights for linear combinations using combinatorial search + binary refinement:
+```python
+from math_toolkit.binary_search import WeightCombinationSearch
+
+# Find W where: 15*W1 + 47*W2 + (-12)*W3 ≈ 28
+search = WeightCombinationSearch(tolerance=2, max_iter=50)
+weights = search.find_optimal_weights([15, 47, -12], target=28)
+# Result: [0.5, 0.5, 0.125] → 29.5 (within tolerance!)
+```
+
+**Key Features:**
+- Tests all 2^N-1 combinations per cycle (truth table approach)
+- Binary refinement via Weighted Possibility Number (WPN)
+- No learning rate tuning needed
+- Converges faster than gradient descent for weight problems
+- Optional truth table output (DataFrame/CSV)
 
 ### 📦 **Clear Module Organization**
 - **math_toolkit.binary_search** - Binary search algorithms with tolerance-based comparisons
@@ -140,6 +159,24 @@ result = BinarySearch.search_for_function(
 print(f"sqrt(100) = {result}")  # 10.0
 ```
 
+### Weight Combination Search
+
+```python
+from math_toolkit.binary_search import WeightCombinationSearch
+
+# Find optimal weights: 15*W1 + 47*W2 + (-12)*W3 ≈ 28
+coefficients = [15, 47, -12]
+target = 28
+tolerance = 2
+
+search = WeightCombinationSearch(tolerance=tolerance, max_iter=50)
+weights = search.find_optimal_weights(coefficients, target)
+
+result = sum(c * w for c, w in zip(coefficients, weights))
+print(f"Weights: {weights}")  # [0.5, 0.5, 0.125]
+print(f"Result: {result:.2f} (target: {target})")  # 29.5 (within tolerance)
+```
+
 ### Gradient Descent Optimization
 
 ```python
@@ -199,8 +236,13 @@ print(f"Solution: x={result.x[0]:.4f}, y={result.x[1]:.4f}")  # x=3, y=2
 
 ### 1. **Binary Search Algorithms** (`math_toolkit.binary_search`)
 - **BinarySearch**: Advanced search with tolerance-based comparisons
-- Array search, function root finding, stepped search
-- Mathematical comparison functions
+  - Array search, function root finding, stepped search
+  - Mathematical comparison functions
+- **WeightCombinationSearch**: Combinatorial weight optimization
+  - Finds optimal weights for linear combinations (A·W ≈ Target)
+  - Uses truth table + binary refinement via Weighted Possibility Number (WPN)
+  - Converges faster than gradient descent for weight finding
+  - No learning rate tuning needed
 
 ### 2. **Optimization Algorithms** (`math_toolkit.optimization`)
 - **BinaryRateOptimizer**: Gradient descent with binary search learning rate (10× faster than AdamW)
