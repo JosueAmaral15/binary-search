@@ -460,5 +460,147 @@ class TestTieBreaking:
         assert abs(result - target) <= tolerance * 2  # Allow 2x tolerance
 
 
+class TestParameterFlexibility:
+    """Test parameter override and setter methods (NEW)."""
+    
+    def test_method_override_tolerance(self):
+        """Test overriding tolerance in method call."""
+        coeffs = [15, 47, -12]
+        target = 28
+        
+        # Constructor default: tolerance=2
+        search = WeightCombinationSearch(tolerance=2, max_iter=50)
+        
+        # Override with tolerance=1
+        weights = search.find_optimal_weights(coeffs, target, tolerance=1)
+        result = sum(c * w for c, w in zip(coeffs, weights))
+        
+        # Should work
+        assert isinstance(weights, np.ndarray)
+        assert len(weights) == len(coeffs)
+    
+    def test_method_override_max_iter(self):
+        """Test overriding max_iter in method call."""
+        coeffs = [10, 20, 30]
+        target = 60
+        
+        # Constructor default: max_iter=50
+        search = WeightCombinationSearch(tolerance=1, max_iter=50)
+        
+        # Override with max_iter=10
+        weights = search.find_optimal_weights(coeffs, target, max_iter=10)
+        result = sum(c * w for c, w in zip(coeffs, weights))
+        
+        # Should work even with fewer iterations
+        assert isinstance(weights, np.ndarray)
+        assert len(weights) == len(coeffs)
+    
+    def test_method_override_both(self):
+        """Test overriding both tolerance and max_iter."""
+        coeffs = [8, 15, 20]
+        target = 50
+        
+        search = WeightCombinationSearch(tolerance=2, max_iter=50)
+        
+        # Override both
+        weights = search.find_optimal_weights(coeffs, target, tolerance=1, max_iter=100)
+        result = sum(c * w for c, w in zip(coeffs, weights))
+        
+        assert isinstance(weights, np.ndarray)
+        assert abs(result - target) <= 1 * 2  # Within reasonable range
+    
+    def test_set_tolerance_method(self):
+        """Test set_tolerance() method."""
+        coeffs = [15, 47, -12]
+        target = 28
+        
+        search = WeightCombinationSearch(tolerance=2, max_iter=50)
+        
+        # Change default tolerance
+        search.set_tolerance(1.5)
+        assert search.tolerance == 1.5
+        
+        # Should use new default
+        weights = search.find_optimal_weights(coeffs, target)
+        result = sum(c * w for c, w in zip(coeffs, weights))
+        
+        assert isinstance(weights, np.ndarray)
+    
+    def test_set_max_iter_method(self):
+        """Test set_max_iter() method."""
+        coeffs = [10, 20]
+        target = 30
+        
+        search = WeightCombinationSearch(tolerance=1, max_iter=50)
+        
+        # Change default max_iter
+        search.set_max_iter(75)
+        assert search.max_iter == 75
+        
+        # Should use new default
+        weights = search.find_optimal_weights(coeffs, target)
+        result = sum(c * w for c, w in zip(coeffs, weights))
+        
+        assert isinstance(weights, np.ndarray)
+    
+    def test_set_tolerance_validation(self):
+        """Test that set_tolerance validates input."""
+        search = WeightCombinationSearch()
+        
+        with pytest.raises(ValueError, match="non-negative"):
+            search.set_tolerance(-1)
+    
+    def test_set_max_iter_validation(self):
+        """Test that set_max_iter validates input."""
+        search = WeightCombinationSearch()
+        
+        with pytest.raises(ValueError, match="at least 1"):
+            search.set_max_iter(0)
+    
+    def test_method_override_after_setter(self):
+        """Test that method override works after using setters."""
+        coeffs = [15, 47, -12]
+        target = 28
+        
+        search = WeightCombinationSearch(tolerance=2, max_iter=50)
+        
+        # Use setters
+        search.set_tolerance(1.5)
+        search.set_max_iter(75)
+        
+        # Method override should still work
+        weights = search.find_optimal_weights(coeffs, target, tolerance=3, max_iter=30)
+        result = sum(c * w for c, w in zip(coeffs, weights))
+        
+        # Should work with overridden values
+        assert isinstance(weights, np.ndarray)
+        assert abs(result - target) <= 3 * 2
+        
+        # Original defaults should be unchanged
+        assert search.tolerance == 1.5
+        assert search.max_iter == 75
+    
+    def test_defaults_preserved_without_override(self):
+        """Test that constructor defaults are used when not overridden."""
+        coeffs = [10, 20, 30]
+        target = 60
+        
+        search = WeightCombinationSearch(tolerance=1, max_iter=50)
+        
+        # First call without override
+        weights1 = search.find_optimal_weights(coeffs, target)
+        
+        # Second call with override
+        weights2 = search.find_optimal_weights(coeffs, target, tolerance=2, max_iter=100)
+        
+        # Third call without override (should use original defaults)
+        weights3 = search.find_optimal_weights(coeffs, target)
+        
+        # All should work
+        assert isinstance(weights1, np.ndarray)
+        assert isinstance(weights2, np.ndarray)
+        assert isinstance(weights3, np.ndarray)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

@@ -100,6 +100,8 @@ class WeightCombinationSearch:
     def find_optimal_weights(self,
                             coefficients: Union[List[float], np.ndarray],
                             target: float,
+                            tolerance: Optional[float] = None,
+                            max_iter: Optional[int] = None,
                             return_truth_table: bool = False,
                             save_csv: bool = False,
                             csv_filename: str = 'truth_table.csv') -> Union[np.ndarray, Tuple]:
@@ -109,6 +111,8 @@ class WeightCombinationSearch:
         Args:
             coefficients: Array [A, B, C, ...] of N parameters
             target: Desired result value
+            tolerance: Override constructor tolerance for this search. Default: use self.tolerance
+            max_iter: Override constructor max_iter for this search. Default: use self.max_iter
             return_truth_table: Return full truth table. Default: False
             save_csv: Save truth table to CSV file. Default: False
             csv_filename: CSV filename if save_csv=True. Default: 'truth_table.csv'
@@ -121,13 +125,23 @@ class WeightCombinationSearch:
             ValueError: If coefficients is empty or contains only zeros
             
         Example:
-            >>> search = WeightCombinationSearch()
-            >>> weights, table = search.find_optimal_weights(
-            ...     coefficients=[15, 47, -12],
-            ...     target=28,
-            ...     return_truth_table=True
-            ... )
+            >>> # Use constructor defaults
+            >>> search = WeightCombinationSearch(tolerance=2, max_iter=50)
+            >>> weights = search.find_optimal_weights([15, 47, -12], target=28)
+            >>> 
+            >>> # Override for specific search
+            >>> weights = search.find_optimal_weights([10, 20, 30], target=60, 
+            ...                                        tolerance=1, max_iter=100)
         """
+        # Use method parameters if provided, otherwise use instance defaults
+        tolerance = tolerance if tolerance is not None else self.tolerance
+        max_iter = max_iter if max_iter is not None else self.max_iter
+        
+        # Validate overridden parameters
+        if tolerance < 0:
+            raise ValueError(f"tolerance must be non-negative, got {tolerance}")
+        if max_iter < 1:
+            raise ValueError(f"max_iter must be at least 1, got {max_iter}")
         # Input validation
         coefficients = np.array(coefficients, dtype=float)
         if len(coefficients) == 0:
@@ -141,8 +155,8 @@ class WeightCombinationSearch:
             logger.info(f"Starting WeightCombinationSearch:")
             logger.info(f"  Parameters: {n_params}")
             logger.info(f"  Target: {target}")
-            logger.info(f"  Tolerance: {self.tolerance}")
-            logger.info(f"  Max iterations: {self.max_iter}")
+            logger.info(f"  Tolerance: {tolerance}")
+            logger.info(f"  Max iterations: {max_iter}")
         
         # Initialize
         W = np.zeros(n_params)
@@ -150,9 +164,9 @@ class WeightCombinationSearch:
         truth_table = []
         
         # Main search loop
-        for cycle in range(self.max_iter):
+        for cycle in range(max_iter):
             if self.verbose:
-                logger.info(f"\nCycle {cycle + 1}/{self.max_iter} (WPN={WPN:.4f}, W={W})")
+                logger.info(f"\nCycle {cycle + 1}/{max_iter} (WPN={WPN:.4f}, W={W})")
             
             # Generate all 2^N - 1 combinations (exclude all-zeros)
             cycle_results = []
@@ -208,9 +222,9 @@ class WeightCombinationSearch:
                 logger.info(f"  Winner: Line {winner_line_num+1}, Δ={winner['delta_abs']:.4f}")
             
             # Check convergence
-            if winner['delta_abs'] <= self.tolerance:
+            if winner['delta_abs'] <= tolerance:
                 if self.verbose:
-                    logger.info(f"\n✅ Converged! Δ={winner['delta_abs']:.4f} ≤ {self.tolerance}")
+                    logger.info(f"\n✅ Converged! Δ={winner['delta_abs']:.4f} ≤ {tolerance}")
                 
                 # Update weights one final time
                 for i in range(n_params):
@@ -428,3 +442,45 @@ class WeightCombinationSearch:
             
             if self.verbose:
                 logger.info(f"Truth table saved to {filename}")
+    
+    def set_tolerance(self, tolerance: float) -> None:
+        """
+        Update the default tolerance value.
+        
+        Args:
+            tolerance: New tolerance value (must be non-negative)
+            
+        Raises:
+            ValueError: If tolerance < 0
+            
+        Example:
+            >>> search = WeightCombinationSearch(tolerance=2)
+            >>> search.set_tolerance(1.0)  # Change default to 1.0
+            >>> weights = search.find_optimal_weights([15, 47, -12], target=28)  # Uses 1.0
+        """
+        if tolerance < 0:
+            raise ValueError(f"tolerance must be non-negative, got {tolerance}")
+        self.tolerance = tolerance
+        if self.verbose:
+            logger.info(f"Tolerance updated to {tolerance}")
+    
+    def set_max_iter(self, max_iter: int) -> None:
+        """
+        Update the default maximum iterations value.
+        
+        Args:
+            max_iter: New maximum iterations (must be at least 1)
+            
+        Raises:
+            ValueError: If max_iter < 1
+            
+        Example:
+            >>> search = WeightCombinationSearch(max_iter=50)
+            >>> search.set_max_iter(100)  # Change default to 100
+            >>> weights = search.find_optimal_weights([15, 47, -12], target=28)  # Uses 100
+        """
+        if max_iter < 1:
+            raise ValueError(f"max_iter must be at least 1, got {max_iter}")
+        self.max_iter = max_iter
+        if self.verbose:
+            logger.info(f"Max iterations updated to {max_iter}")
