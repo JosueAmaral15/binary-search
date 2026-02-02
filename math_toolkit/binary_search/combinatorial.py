@@ -13,6 +13,8 @@ convergence or maximum iterations.
 import numpy as np
 import itertools
 import logging
+import multiprocessing as mp
+from multiprocessing import Pool, Manager, Lock, Event
 from typing import Tuple, List, Dict, Optional, Union, TYPE_CHECKING
 import warnings
 
@@ -37,7 +39,6 @@ except ImportError:
             return args[0]
         return decorator
     HAS_NUMBA = False
-    warnings.warn("pandas not installed. Truth table will be returned as dict.", ImportWarning)
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -134,7 +135,9 @@ class WeightCombinationSearch:
                  sampling_threshold: int = 12,
                  sample_size: int = 10000,
                  sampling_strategy: str = 'importance',
-                 use_numba: bool = True):
+                 use_numba: bool = True,
+                 parallel: bool = True,
+                 n_jobs: int = -1):
         """
         Initialize WeightCombinationSearch.
         
@@ -150,6 +153,8 @@ class WeightCombinationSearch:
             sample_size: Maximum number of combinations to test per cycle when sampling. Default: 10000
             sampling_strategy: Strategy for sampling ('importance', 'random', 'progressive'). Default: 'importance'
             use_numba: Enable Numba JIT compilation for faster formula calculation. Default: True
+            parallel: Enable parallel processing with multiprocessing. Default: True
+            n_jobs: Number of parallel workers (-1 = all cores, 1 = no parallelism). Default: -1
             
         Raises:
             ValueError: If tolerance < 0 or max_iter < 1 or initial_wpn == 0
@@ -180,6 +185,8 @@ class WeightCombinationSearch:
         self.sample_size = sample_size
         self.sampling_strategy = sampling_strategy
         self.use_numba = use_numba and HAS_NUMBA  # Only enable if Numba available
+        self.parallel = parallel
+        self.n_jobs = n_jobs if n_jobs != -1 else mp.cpu_count()
         
         # History tracking
         self.history = {
