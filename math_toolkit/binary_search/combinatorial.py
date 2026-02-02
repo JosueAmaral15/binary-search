@@ -75,7 +75,11 @@ class WeightCombinationSearch:
                  initial_wpn: float = 1.0,
                  wpn_bounds: Tuple[float, float] = (-np.inf, np.inf),
                  verbose: bool = False,
-                 early_stopping: bool = True):
+                 early_stopping: bool = True,
+                 adaptive_sampling: bool = True,
+                 sampling_threshold: int = 12,
+                 sample_size: int = 10000,
+                 sampling_strategy: str = 'importance'):
         """
         Initialize WeightCombinationSearch.
         
@@ -86,6 +90,10 @@ class WeightCombinationSearch:
             wpn_bounds: (min, max) tuple for WPN bounds. Default: (-inf, inf)
             verbose: Print progress information. Default: False
             early_stopping: Enable intra-cycle early stopping when solution found. Default: True
+            adaptive_sampling: Enable intelligent sampling for large N (N > sampling_threshold). Default: True
+            sampling_threshold: Switch to sampling mode when N > this value. Default: 12
+            sample_size: Maximum number of combinations to test per cycle when sampling. Default: 10000
+            sampling_strategy: Strategy for sampling ('importance', 'random', 'progressive'). Default: 'importance'
             
         Raises:
             ValueError: If tolerance < 0 or max_iter < 1 or initial_wpn == 0
@@ -98,6 +106,12 @@ class WeightCombinationSearch:
             raise ValueError("initial_wpn cannot be zero")
         if wpn_bounds[0] >= wpn_bounds[1]:
             raise ValueError(f"Invalid WPN bounds: {wpn_bounds}")
+        if sampling_threshold < 1:
+            raise ValueError(f"sampling_threshold must be at least 1, got {sampling_threshold}")
+        if sample_size < 1:
+            raise ValueError(f"sample_size must be at least 1, got {sample_size}")
+        if sampling_strategy not in ['importance', 'random', 'progressive']:
+            raise ValueError(f"sampling_strategy must be 'importance', 'random', or 'progressive', got {sampling_strategy}")
         
         self.tolerance = tolerance
         self.max_iter = max_iter
@@ -105,6 +119,10 @@ class WeightCombinationSearch:
         self.wpn_bounds = wpn_bounds
         self.verbose = verbose
         self.early_stopping = early_stopping
+        self.adaptive_sampling = adaptive_sampling
+        self.sampling_threshold = sampling_threshold
+        self.sample_size = sample_size
+        self.sampling_strategy = sampling_strategy
         
         # History tracking
         self.history = {
@@ -185,8 +203,15 @@ class WeightCombinationSearch:
             if self.verbose:
                 logger.info(f"\nCycle {cycle + 1}/{max_iter} (WPN={WPN:.4f}, W={W})")
             
-            # Generate all 2^N - 1 combinations (exclude all-zeros)
-            combos = self._generate_combinations(n_params)
+            # Generate combinations (exhaustive or sampled)
+            if self.adaptive_sampling and n_params > self.sampling_threshold:
+                # ADAPTIVE SAMPLING MODE for large N
+                combos = self._generate_sampled_combinations(n_params, coefficients, self.sample_size, self.sampling_strategy)
+                if self.verbose:
+                    logger.info(f"  🎯 Adaptive sampling: testing {len(combos):,} of {2**n_params-1:,} combinations")
+            else:
+                # EXHAUSTIVE MODE for small N
+                combos = self._generate_combinations(n_params)
             
             # Track best winner during iteration (Selection Sort pattern)
             best_winner = None
@@ -354,6 +379,144 @@ class WeightCombinationSearch:
         
         # Exclude all-zeros (first combination)
         combos = [np.array(combo) for combo in all_combos[1:]]
+        
+        return combos
+    
+    def _generate_sampled_combinations(self, 
+                                       n_params: int, 
+                                       coefficients: np.ndarray,
+                                       sample_size: int,
+                                       strategy: str) -> List[np.ndarray]:
+        """
+        Generate sampled combinations for large N using intelligent sampling.
+        
+        Args:
+            n_params: Number of parameters
+            coefficients: Parameter values (for importance sampling)
+            sample_size: Maximum number of combinations to generate
+            strategy: Sampling strategy ('importance', 'random', 'progressive')
+            
+        Returns:
+            List of boolean arrays representing sampled combinations
+        """
+        total_combos = 2**n_params - 1  # Exclude all-zeros
+        actual_sample_size = min(sample_size, total_combos)
+        
+        if strategy == 'importance':
+            return self._importance_sampling(n_params, coefficients, actual_sample_size)
+        elif strategy == 'random':
+            return self._random_sampling(n_params, actual_sample_size)
+        elif strategy == 'progressive':
+            return self._progressive_sampling(n_params, coefficients, actual_sample_size)
+        else:
+            raise ValueError(f"Unknown sampling strategy: {strategy}")
+    
+    def _importance_sampling(self, 
+                            n_params: int, 
+                            coefficients: np.ndarray, 
+                            sample_size: int) -> List[np.ndarray]:
+        """
+        Importance sampling: favor combinations with high-magnitude parameters.
+        
+        Strategy:
+        - Parameters with larger absolute values are more likely to be selected
+        - Ensures diverse coverage of combination space
+        - Includes some pure single-parameter combinations
+        
+        Args:
+            n_params: Number of parameters
+            coefficients: Parameter values
+            sample_size: Number of combinations to generate
+            
+        Returns:
+            List of sampled combinations
+        """
+        combos = []
+        
+        # Calculate importance weights (use absolute values)
+        importance = np.abs(coefficients)
+        if importance.sum() > 0:
+            importance = importance / importance.sum()  # Normalize to probabilities
+        else:
+            importance = np.ones(n_params) / n_params  # Uniform if all zeros
+        
+        # Always include single-parameter combinations (pure selections)
+        for i in range(n_params):
+            combo = np.zeros(n_params, dtype=bool)
+            combo[i] = True
+            combos.append(combo)
+        
+        # Generate random combinations weighted by importance
+        np.random.seed(42)  # For reproducibility
+        remaining_samples = sample_size - n_params
+        
+        for _ in range(remaining_samples):
+            # Each parameter selected independently with its importance probability
+            # Modified: increase selection probability to get more "True" values
+            combo = np.random.rand(n_params) < (importance * 2).clip(0, 0.8)
+            
+            # Ensure at least one True (exclude all-zeros)
+            if not combo.any():
+                # Select the most important parameter
+                combo[np.argmax(importance)] = True
+            
+            combos.append(combo)
+        
+        return combos
+    
+    def _random_sampling(self, n_params: int, sample_size: int) -> List[np.ndarray]:
+        """
+        Uniform random sampling of combination space.
+        
+        Args:
+            n_params: Number of parameters
+            sample_size: Number of combinations to generate
+            
+        Returns:
+            List of sampled combinations
+        """
+        combos = []
+        np.random.seed(42)
+        
+        for _ in range(sample_size):
+            # Random combination with ~50% True values
+            combo = np.random.rand(n_params) < 0.5
+            
+            # Ensure at least one True
+            if not combo.any():
+                combo[np.random.randint(0, n_params)] = True
+            
+            combos.append(combo)
+        
+        return combos
+    
+    def _progressive_sampling(self, 
+                             n_params: int, 
+                             coefficients: np.ndarray, 
+                             sample_size: int) -> List[np.ndarray]:
+        """
+        Progressive sampling: multi-stage refinement strategy.
+        
+        Stage 1: Random sample to explore space
+        Stage 2: Importance-weighted sample around promising regions
+        
+        Args:
+            n_params: Number of parameters
+            coefficients: Parameter values
+            sample_size: Number of combinations to generate
+            
+        Returns:
+            List of sampled combinations
+        """
+        combos = []
+        
+        # Stage 1: 40% random exploration
+        stage1_size = int(sample_size * 0.4)
+        combos.extend(self._random_sampling(n_params, stage1_size))
+        
+        # Stage 2: 60% importance-weighted exploitation
+        stage2_size = sample_size - stage1_size
+        combos.extend(self._importance_sampling(n_params, coefficients, stage2_size))
         
         return combos
     
