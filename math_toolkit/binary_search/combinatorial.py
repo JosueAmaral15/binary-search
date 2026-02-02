@@ -74,7 +74,8 @@ class WeightCombinationSearch:
                  max_iter: int = 32,
                  initial_wpn: float = 1.0,
                  wpn_bounds: Tuple[float, float] = (-np.inf, np.inf),
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 early_stopping: bool = True):
         """
         Initialize WeightCombinationSearch.
         
@@ -84,6 +85,7 @@ class WeightCombinationSearch:
             initial_wpn: Starting Weighted Possibility Number. Default: 1.0
             wpn_bounds: (min, max) tuple for WPN bounds. Default: (-inf, inf)
             verbose: Print progress information. Default: False
+            early_stopping: Enable intra-cycle early stopping when solution found. Default: True
             
         Raises:
             ValueError: If tolerance < 0 or max_iter < 1 or initial_wpn == 0
@@ -102,12 +104,14 @@ class WeightCombinationSearch:
         self.initial_wpn = initial_wpn
         self.wpn_bounds = wpn_bounds
         self.verbose = verbose
+        self.early_stopping = early_stopping
         
         # History tracking
         self.history = {
             'cycles': [],
             'wpn_evolution': [],
-            'best_delta_evolution': []
+            'best_delta_evolution': [],
+            'early_stops': []  # Track when early stopping occurred
         }
     
     def find_optimal_weights(self,
@@ -185,6 +189,10 @@ class WeightCombinationSearch:
             cycle_results = []
             combos = self._generate_combinations(n_params)
             
+            # Track if we found early stopping solution
+            early_stopped = False
+            early_stop_line = None
+            
             for line_num, combo in enumerate(combos):
                 # Calculate result using core formula
                 result = self._calculate_result(coefficients, W, combo, WPN)
@@ -193,12 +201,13 @@ class WeightCombinationSearch:
                 delta_abs = abs(result - target)
                 delta_cond = result - target
                 
-                cycle_results.append({
+                combo_data = {
                     'combo': combo,
                     'result': result,
                     'delta_abs': delta_abs,
                     'delta_cond': delta_cond
-                })
+                }
+                cycle_results.append(combo_data)
                 
                 # Record in truth table
                 truth_table.append({
@@ -215,24 +224,52 @@ class WeightCombinationSearch:
                 
                 if self.verbose and line_num < 5:  # Show first few lines
                     logger.info(f"  Line {line_num+1}: combo={combo}, result={result:.4f}, Δ={delta_abs:.4f}")
+                
+                # INTRA-CYCLE EARLY STOPPING
+                if self.early_stopping and delta_abs <= tolerance:
+                    early_stopped = True
+                    early_stop_line = line_num + 1
+                    
+                    if self.verbose:
+                        logger.info(f"  ⚡ EARLY STOP at line {line_num+1}/{len(combos)}: Δ={delta_abs:.4f} ≤ {tolerance}")
+                        logger.info(f"  Skipped {len(combos) - line_num - 1:,} remaining combinations")
+                    
+                    # This combo is the winner
+                    winner = combo_data
+                    break  # Exit combo loop immediately
             
-            # Find winner (minimum absolute difference, tie break: result > target)
-            winner = self._find_winner(cycle_results)
-            
-            # Find winner index in cycle_results
-            winner_line_num = None
-            for idx, result_dict in enumerate(cycle_results):
-                if (result_dict['result'] == winner['result'] and 
-                    result_dict['delta_abs'] == winner['delta_abs'] and
-                    np.array_equal(result_dict['combo'], winner['combo'])):
-                    winner_line_num = idx
-                    break
-            
-            winner_index = len(truth_table) - len(cycle_results) + winner_line_num
-            truth_table[winner_index]['is_winner'] = True
-            
-            if self.verbose:
-                logger.info(f"  Winner: Line {winner_line_num+1}, Δ={winner['delta_abs']:.4f}")
+            # If early stopping occurred, no need to find winner again
+            if not early_stopped:
+                # Find winner (minimum absolute difference, tie break: result > target)
+                winner = self._find_winner(cycle_results)
+                
+                # Find winner index in cycle_results
+                winner_line_num = None
+                for idx, result_dict in enumerate(cycle_results):
+                    if (result_dict['result'] == winner['result'] and 
+                        result_dict['delta_abs'] == winner['delta_abs'] and
+                        np.array_equal(result_dict['combo'], winner['combo'])):
+                        winner_line_num = idx
+                        break
+                
+                winner_index = len(truth_table) - len(cycle_results) + winner_line_num
+                truth_table[winner_index]['is_winner'] = True
+                
+                if self.verbose:
+                    logger.info(f"  Winner: Line {winner_line_num+1}, Δ={winner['delta_abs']:.4f}")
+            else:
+                # Early stopped: winner already set, just mark it in truth table
+                winner_index = len(truth_table) - len(cycle_results) + (early_stop_line - 1)
+                truth_table[winner_index]['is_winner'] = True
+                
+                # Track early stop in history
+                self.history['early_stops'].append({
+                    'cycle': cycle + 1,
+                    'line': early_stop_line,
+                    'total_combos': len(combos),
+                    'tested_combos': early_stop_line,
+                    'skipped_combos': len(combos) - early_stop_line
+                })
             
             # Check convergence
             if winner['delta_abs'] <= tolerance:
