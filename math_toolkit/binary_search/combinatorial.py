@@ -23,6 +23,20 @@ try:
 except ImportError:
     pd = None  # type: ignore
     HAS_PANDAS = False
+
+# Optional Numba for JIT compilation
+try:
+    from numba import njit
+    HAS_NUMBA = True
+except ImportError:
+    # Fallback: no-op decorator
+    def njit(*args, **kwargs):
+        def decorator(func):
+            return func
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
+    HAS_NUMBA = False
     warnings.warn("pandas not installed. Truth table will be returned as dict.", ImportWarning)
 
 if TYPE_CHECKING:
@@ -30,6 +44,46 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+# ============================================================================
+# NUMBA-OPTIMIZED CALCULATION FUNCTIONS
+# ============================================================================
+
+@njit(cache=True)
+def _calculate_result_numba(coefficients, weights, combo, wpn):
+    """
+    Numba-optimized calculation of result using core formula.
+    
+    Formula: param[i] * (W[i] if W[i]!=0 else (1 if combo[i] else W[i])) * (WPN if combo[i] else 1)
+    
+    Args:
+        coefficients: Parameter array (must be contiguous)
+        weights: Current weight array (must be contiguous)
+        combo: Boolean combination array (must be contiguous)
+        wpn: Current Weighted Possibility Number
+        
+    Returns:
+        Calculated result value
+    """
+    result = 0.0
+    n = len(coefficients)
+    
+    for i in range(n):
+        # Determine effective weight
+        w = weights[i] if weights[i] != 0.0 else (1.0 if combo[i] else weights[i])
+        
+        # Determine multiplier
+        mult = wpn if combo[i] else 1.0
+        
+        # Accumulate result
+        result += coefficients[i] * w * mult
+    
+    return result
+
+
+# ============================================================================
+# MAIN CLASS
+# ============================================================================
 
 class WeightCombinationSearch:
     """
@@ -79,7 +133,8 @@ class WeightCombinationSearch:
                  adaptive_sampling: bool = True,
                  sampling_threshold: int = 12,
                  sample_size: int = 10000,
-                 sampling_strategy: str = 'importance'):
+                 sampling_strategy: str = 'importance',
+                 use_numba: bool = True):
         """
         Initialize WeightCombinationSearch.
         
@@ -94,6 +149,7 @@ class WeightCombinationSearch:
             sampling_threshold: Switch to sampling mode when N > this value. Default: 12
             sample_size: Maximum number of combinations to test per cycle when sampling. Default: 10000
             sampling_strategy: Strategy for sampling ('importance', 'random', 'progressive'). Default: 'importance'
+            use_numba: Enable Numba JIT compilation for faster formula calculation. Default: True
             
         Raises:
             ValueError: If tolerance < 0 or max_iter < 1 or initial_wpn == 0
@@ -123,6 +179,7 @@ class WeightCombinationSearch:
         self.sampling_threshold = sampling_threshold
         self.sample_size = sample_size
         self.sampling_strategy = sampling_strategy
+        self.use_numba = use_numba and HAS_NUMBA  # Only enable if Numba available
         
         # History tracking
         self.history = {
@@ -530,6 +587,8 @@ class WeightCombinationSearch:
         
         Formula: param[i] * (W[i] if W[i]!=0 else (1 if combo[i] else W[i])) * (WPN if combo[i] else 1)
         
+        Uses Numba JIT if available for ~10-50x speedup.
+        
         Args:
             coefficients: Parameter array
             weights: Current weight array
@@ -539,22 +598,31 @@ class WeightCombinationSearch:
         Returns:
             Calculated result
         """
-        result = 0.0
-        
-        for i in range(len(coefficients)):
-            # Weight multiplier
-            if weights[i] != 0:
-                weight_mult = weights[i]
-            else:
-                weight_mult = 1 if combo[i] else weights[i]  # 1 if selected, 0 if not
+        if self.use_numba:
+            # Use Numba JIT-compiled version (fast path)
+            # Ensure arrays are contiguous for Numba
+            coefficients = np.ascontiguousarray(coefficients)
+            weights = np.ascontiguousarray(weights)
+            combo = np.ascontiguousarray(combo, dtype=np.bool_)
+            return _calculate_result_numba(coefficients, weights, combo, wpn)
+        else:
+            # Pure Python fallback
+            result = 0.0
             
-            # WPN multiplier
-            wpn_mult = wpn if combo[i] else 1
+            for i in range(len(coefficients)):
+                # Weight multiplier
+                if weights[i] != 0:
+                    weight_mult = weights[i]
+                else:
+                    weight_mult = 1 if combo[i] else weights[i]  # 1 if selected, 0 if not
+                
+                # WPN multiplier
+                wpn_mult = wpn if combo[i] else 1
+                
+                # Calculate contribution
+                result += coefficients[i] * weight_mult * wpn_mult
             
-            # Calculate contribution
-            result += coefficients[i] * weight_mult * wpn_mult
-        
-        return result
+            return result
     
     def _find_winner(self, cycle_results: List[Dict]) -> Dict:
         """
