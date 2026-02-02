@@ -186,12 +186,17 @@ class WeightCombinationSearch:
                 logger.info(f"\nCycle {cycle + 1}/{max_iter} (WPN={WPN:.4f}, W={W})")
             
             # Generate all 2^N - 1 combinations (exclude all-zeros)
-            cycle_results = []
             combos = self._generate_combinations(n_params)
             
-            # Track if we found early stopping solution
+            # Track best winner during iteration (Selection Sort pattern)
+            best_winner = None
+            best_delta = float('inf')
             early_stopped = False
             early_stop_line = None
+            
+            # For truth table and WPN adjustment, we still need all results
+            # But we track the winner incrementally
+            cycle_results = []
             
             for line_num, combo in enumerate(combos):
                 # Calculate result using core formula
@@ -205,8 +210,11 @@ class WeightCombinationSearch:
                     'combo': combo,
                     'result': result,
                     'delta_abs': delta_abs,
-                    'delta_cond': delta_cond
+                    'delta_cond': delta_cond,
+                    'line_num': line_num
                 }
+                
+                # Store for WPN adjustment and truth table
                 cycle_results.append(combo_data)
                 
                 # Record in truth table
@@ -222,54 +230,53 @@ class WeightCombinationSearch:
                     'is_winner': False
                 })
                 
+                # SELECTION SORT PATTERN: Track best winner during iteration
+                if delta_abs < best_delta or (delta_abs == best_delta and result > best_winner['result'] if best_winner else False):
+                    # New best found (or tie-break: prefer result > target)
+                    best_delta = delta_abs
+                    best_winner = combo_data
+                
                 if self.verbose and line_num < 5:  # Show first few lines
                     logger.info(f"  Line {line_num+1}: combo={combo}, result={result:.4f}, Δ={delta_abs:.4f}")
+                    if delta_abs == best_delta:
+                        logger.info(f"    ✓ New best!")
                 
                 # INTRA-CYCLE EARLY STOPPING
                 if self.early_stopping and delta_abs <= tolerance:
                     early_stopped = True
                     early_stop_line = line_num + 1
                     
+                    # Ensure this is the winner (it has delta <= tolerance)
+                    best_winner = combo_data
+                    best_delta = delta_abs
+                    
                     if self.verbose:
                         logger.info(f"  ⚡ EARLY STOP at line {line_num+1}/{len(combos)}: Δ={delta_abs:.4f} ≤ {tolerance}")
                         logger.info(f"  Skipped {len(combos) - line_num - 1:,} remaining combinations")
                     
-                    # This combo is the winner
-                    winner = combo_data
                     break  # Exit combo loop immediately
             
-            # If early stopping occurred, no need to find winner again
-            if not early_stopped:
-                # Find winner (minimum absolute difference, tie break: result > target)
-                winner = self._find_winner(cycle_results)
-                
-                # Find winner index in cycle_results
-                winner_line_num = None
-                for idx, result_dict in enumerate(cycle_results):
-                    if (result_dict['result'] == winner['result'] and 
-                        result_dict['delta_abs'] == winner['delta_abs'] and
-                        np.array_equal(result_dict['combo'], winner['combo'])):
-                        winner_line_num = idx
-                        break
-                
+            # Winner is already tracked! No need to search again
+            winner = best_winner
+            
+            # Mark winner in truth table
+            if winner:
+                winner_line_num = winner['line_num']
                 winner_index = len(truth_table) - len(cycle_results) + winner_line_num
                 truth_table[winner_index]['is_winner'] = True
                 
-                if self.verbose:
+                if self.verbose and not early_stopped:
                     logger.info(f"  Winner: Line {winner_line_num+1}, Δ={winner['delta_abs']:.4f}")
-            else:
-                # Early stopped: winner already set, just mark it in truth table
-                winner_index = len(truth_table) - len(cycle_results) + (early_stop_line - 1)
-                truth_table[winner_index]['is_winner'] = True
                 
                 # Track early stop in history
-                self.history['early_stops'].append({
-                    'cycle': cycle + 1,
-                    'line': early_stop_line,
-                    'total_combos': len(combos),
-                    'tested_combos': early_stop_line,
-                    'skipped_combos': len(combos) - early_stop_line
-                })
+                if early_stopped:
+                    self.history['early_stops'].append({
+                        'cycle': cycle + 1,
+                        'line': early_stop_line,
+                        'total_combos': len(combos),
+                        'tested_combos': early_stop_line,
+                        'skipped_combos': len(combos) - early_stop_line
+                    })
             
             # Check convergence
             if winner['delta_abs'] <= tolerance:
