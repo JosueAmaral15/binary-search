@@ -98,7 +98,7 @@ class OptimizerBenchmark:
                 'result': result,
                 'error': error,
                 'rel_error': rel_error,
-                'iterations': len(wcs.history['cost']),
+                'iterations': len(wcs.history['cycles']),  # Fixed: 'cost' -> 'cycles'
                 'time': elapsed,
                 'weights': weights,
                 'converged': rel_error < 0.01

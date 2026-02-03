@@ -533,6 +533,11 @@ class WeightCombinationSearch:
                         'skipped_combos': len(combos) - early_stop_line
                     })
             
+            # Track history BEFORE any return (bug fix: was after convergence check)
+            self.history['cycles'].append(cycle + 1)
+            self.history['wpn_evolution'].append(WPN)
+            self.history['best_delta_evolution'].append(winner['delta_abs'])
+            
             # Check convergence
             if winner['delta_abs'] <= tolerance:
                 if self.verbose:
@@ -555,7 +560,7 @@ class WeightCombinationSearch:
                 
                 return W
             
-            # Update weights based on winner
+            # Update weights based on winner (if not converged)
             for i in range(n_params):
                 if winner['combo'][i]:
                     if W[i] == 0:
@@ -573,11 +578,6 @@ class WeightCombinationSearch:
             
             if self.verbose:
                 logger.info(f"  WPN: {old_wpn:.4f} → {WPN:.4f}")
-            
-            # Track history
-            self.history['cycles'].append(cycle + 1)
-            self.history['wpn_evolution'].append(WPN)
-            self.history['best_delta_evolution'].append(winner['delta_abs'])
         
         # Max iterations reached
         if self.verbose:
