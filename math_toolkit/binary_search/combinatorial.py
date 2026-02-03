@@ -399,9 +399,9 @@ class WeightCombinationSearch:
             
             # Calculate current result for filtering decision
             if self.index_filtering:
-                # Calculate result with all current weights
-                all_ones_combo = np.ones(n_params, dtype=bool)
-                current_result = self._calculate_result(coefficients_working, W, all_ones_combo, WPN)
+                # Calculate result with CURRENT weights only (not all_ones)
+                # BUG FIX: Was using all_ones_combo which gave false accuracy readings
+                current_result = np.sum(coefficients_working * W)
                 
                 # Calculate which indices to optimize this cycle
                 index_filtered = _calculate_index_filtered(target, current_result, n_params)
