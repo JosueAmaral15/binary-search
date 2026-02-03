@@ -83,6 +83,114 @@ def _calculate_result_numba(coefficients, weights, combo, wpn):
 
 
 # ============================================================================
+# INDEX FILTERING FUNCTIONS (UPDATED FORMULAS v2.0)
+# ============================================================================
+
+def _selecionador_absoluto(x, a, b, c, d, j, k, l, m, n, w):
+    """
+    Core sine-wave selector function for index filtering.
+    
+    Formula: ((a-m)/2) * (sin(π*n*(((j-w)/(2*c))*(|x-b+c*k| - |x-b-c*(1-k)| + c) 
+             + w + π*((l*(2/π) - (1/π))/2))) + 1) + d + m
+    
+    This function generates smooth transitions from extremes to middle based
+    on the step parameter, which reflects proximity to target.
+    
+    Args:
+        x: Input value (typically the step parameter)
+        a, b, c, d: Amplitude and position controls
+        j, k, l, m, n, w: Wave shaping parameters
+        
+    Returns:
+        Calculated selector value
+    """
+    import math
+    
+    # Inner absolute value term
+    inner_abs = abs(x - b + c*k) - abs(x - b - c*(1-k)) + c
+    
+    # Fraction term
+    fraction = (j - w) / (2 * c)
+    
+    # Constant offset term
+    l_term = l * (2/math.pi) - (1/math.pi)
+    constant_offset = math.pi * (l_term / 2)
+    
+    # Sine input
+    sine_input = math.pi * n * (fraction * inner_abs + w + constant_offset)
+    
+    # Calculate result
+    sine_value = math.sin(sine_input)
+    amplitude = (a - m) / 2
+    result = amplitude * (sine_value + 1) + d + m
+    
+    return result
+
+
+def _positive_numbers(x, a, b, c, d, j, k, l, m, n, w):
+    """Alias for _selecionador_absoluto (used in limit calculations)"""
+    return _selecionador_absoluto(x, a, b, c, d, j, k, l, m, n, w)
+
+
+def _calculate_index_filtered(target, result, tq):
+    """
+    Calculate which coefficient indices to optimize based on proximity to target.
+    
+    Uses sine-wave-based mathematical formulas to dynamically select indices:
+    - Far from target (low %) → extremes (both ends of sorted array)
+    - Close to target (high %) → middle (center of sorted array)
+    
+    Formula version: 2.0 (updated to prevent out-of-range indices)
+    
+    Args:
+        target: Target value to reach
+        result: Current result value
+        tq: Terms quantity (number of coefficients)
+        
+    Returns:
+        list: Indices to include in optimization (may be empty, may contain negatives)
+    """
+    import math
+    
+    # Calculate proximity percentage
+    diff_res = abs(target - result)
+    percentage = 1 - (diff_res / abs(target)) if target != 0 else 0.0
+    
+    # Binary selector (protection for extreme divergence)
+    selector = math.ceil(0.5 * (abs(percentage) - abs(percentage - 1) + 1))
+    step = selector * percentage
+    
+    # Calculate limits using UPDATED formulas (v2.0)
+    c_val = 1 + tq/(tq+1)
+    
+    # Upper limit: a=tq-1 (prevents out-of-range), m=tq/2
+    upper_limit_val = _positive_numbers(step, tq-1, 0, 1, 0, 1, 0, 1, tq/2, 1, 0)
+    
+    # Lower limit: unchanged
+    lower_limit_val = _positive_numbers(step, (tq-1)/2, 0, 1, 0, 1, 0, 2, 0, 1, 0)
+    
+    # Upper subtraction limit: a=tq-1, d=(tq-1)/2
+    upper_sub_val = _positive_numbers(step, tq-1, -1, c_val, (tq-1)/2, 1, 0, 1, 0, 1, 0)
+    
+    # Lower subtraction limit: unchanged
+    lower_sub_val = _positive_numbers(step, tq, -1, c_val, -tq/2, 1, 0, 0, 0, 1, 0)
+    
+    # Generate sequences
+    start_add = math.floor(lower_limit_val)
+    end_add = math.ceil(upper_limit_val)
+    add_numbers = list(range(start_add, end_add + 1))
+    
+    start_sub = math.ceil(lower_sub_val) + 1
+    end_sub = math.floor(upper_sub_val) - 1
+    substract_numbers = list(range(start_sub, end_sub + 1)) if start_sub <= end_sub else []
+    
+    # Remove subtraction from addition
+    index_filtered = [x for x in add_numbers if x not in substract_numbers]
+    
+    return index_filtered
+
+
+# ============================================================================
 # MAIN CLASS
 # ============================================================================
 
@@ -137,7 +245,8 @@ class WeightCombinationSearch:
                  sampling_strategy: str = 'importance',
                  use_numba: bool = True,
                  parallel: bool = True,
-                 n_jobs: int = -1):
+                 n_jobs: int = -1,
+                 index_filtering: bool = False):
         """
         Initialize WeightCombinationSearch.
         
@@ -155,6 +264,7 @@ class WeightCombinationSearch:
             use_numba: Enable Numba JIT compilation for faster formula calculation. Default: True
             parallel: Enable parallel processing with multiprocessing. Default: True
             n_jobs: Number of parallel workers (-1 = all cores, 1 = no parallelism). Default: -1
+            index_filtering: Enable dynamic index filtering (extremes→middle based on proximity). Default: False
             
         Raises:
             ValueError: If tolerance < 0 or max_iter < 1 or initial_wpn == 0
@@ -187,13 +297,15 @@ class WeightCombinationSearch:
         self.use_numba = use_numba and HAS_NUMBA  # Only enable if Numba available
         self.parallel = parallel
         self.n_jobs = n_jobs if n_jobs != -1 else mp.cpu_count()
+        self.index_filtering = index_filtering
         
         # History tracking
         self.history = {
             'cycles': [],
             'wpn_evolution': [],
             'best_delta_evolution': [],
-            'early_stops': []  # Track when early stopping occurred
+            'early_stops': [],  # Track when early stopping occurred
+            'filtering_history': []  # Track filtered indices per cycle
         }
     
     def find_optimal_weights(self,
@@ -250,12 +362,30 @@ class WeightCombinationSearch:
         
         n_params = len(coefficients)
         
+        # Index filtering setup (if enabled)
+        if self.index_filtering:
+            # Sort coefficients (smallest to largest)
+            coeffs_sorted = np.sort(coefficients)
+            sort_indices = np.argsort(coefficients)  # Mapping: sorted_idx -> original_idx
+            inverse_sort_indices = np.argsort(sort_indices)  # Mapping: original_idx -> sorted_idx
+            
+            # Use sorted coefficients for optimization
+            coefficients_working = coeffs_sorted
+        else:
+            # Use original order
+            coefficients_working = coefficients
+            sort_indices = None
+            inverse_sort_indices = None
+        
         if self.verbose:
             logger.info(f"Starting WeightCombinationSearch:")
             logger.info(f"  Parameters: {n_params}")
             logger.info(f"  Target: {target}")
             logger.info(f"  Tolerance: {tolerance}")
             logger.info(f"  Max iterations: {max_iter}")
+            logger.info(f"  Index filtering: {'enabled' if self.index_filtering else 'disabled'}")
+            if self.index_filtering:
+                logger.info(f"  Sorted coefficients: {coefficients_working}")
         
         # Initialize
         W = np.zeros(n_params)
@@ -267,15 +397,51 @@ class WeightCombinationSearch:
             if self.verbose:
                 logger.info(f"\nCycle {cycle + 1}/{max_iter} (WPN={WPN:.4f}, W={W})")
             
-            # Generate combinations (exhaustive or sampled)
-            if self.adaptive_sampling and n_params > self.sampling_threshold:
-                # ADAPTIVE SAMPLING MODE for large N
-                combos = self._generate_sampled_combinations(n_params, coefficients, self.sample_size, self.sampling_strategy)
+            # Calculate current result for filtering decision
+            if self.index_filtering:
+                # Calculate result with all current weights
+                all_ones_combo = np.ones(n_params, dtype=bool)
+                current_result = self._calculate_result(coefficients_working, W, all_ones_combo, WPN)
+                
+                # Calculate which indices to optimize this cycle
+                index_filtered = _calculate_index_filtered(target, current_result, n_params)
+                
+                # Filter to valid indices only (0 to n_params-1)
+                index_filtered = [idx for idx in index_filtered if 0 <= idx < n_params]
+                
+                # Store in history
+                self.history['filtering_history'].append({
+                    'cycle': cycle + 1,
+                    'result': current_result,
+                    'percentage': 1 - abs(target - current_result)/abs(target) if target != 0 else 0,
+                    'index_filtered': index_filtered.copy(),
+                    'num_filtered': len(index_filtered)
+                })
+                
                 if self.verbose:
-                    logger.info(f"  🎯 Adaptive sampling: testing {len(combos):,} of {2**n_params-1:,} combinations")
+                    percentage = 1 - abs(target - current_result)/abs(target) if target != 0 else 0
+                    logger.info(f"  📊 Current result: {current_result:.4f} ({percentage*100:.2f}% accurate)")
+                    logger.info(f"  🔍 Index filtering: {len(index_filtered)} out of {n_params} indices")
+                    if len(index_filtered) <= 10:
+                        logger.info(f"      Filtered indices: {index_filtered}")
+                
+                # Determine n_params for combination generation
+                n_params_filtered = len(index_filtered) if len(index_filtered) > 0 else n_params
+            else:
+                # No filtering, use all parameters
+                index_filtered = None
+                n_params_filtered = n_params
+            
+            # Generate combinations (exhaustive or sampled)
+            # If filtering enabled, generate for filtered space
+            if self.adaptive_sampling and n_params_filtered > self.sampling_threshold:
+                # ADAPTIVE SAMPLING MODE for large N
+                combos = self._generate_sampled_combinations(n_params, coefficients_working if not index_filtered else coefficients_working[index_filtered], self.sample_size, self.sampling_strategy, index_filtered)
+                if self.verbose:
+                    logger.info(f"  🎯 Adaptive sampling: testing {len(combos):,} of {2**n_params_filtered-1:,} combinations")
             else:
                 # EXHAUSTIVE MODE for small N
-                combos = self._generate_combinations(n_params)
+                combos = self._generate_combinations(n_params, index_filtered)
             
             # Track best winner during iteration (Selection Sort pattern)
             best_winner = None
@@ -289,7 +455,7 @@ class WeightCombinationSearch:
             
             for line_num, combo in enumerate(combos):
                 # Calculate result using core formula
-                result = self._calculate_result(coefficients, W, combo, WPN)
+                result = self._calculate_result(coefficients_working, W, combo, WPN)
                 
                 # Calculate differences
                 delta_abs = abs(result - target)
@@ -428,57 +594,109 @@ class WeightCombinationSearch:
         
         return W
     
-    def _generate_combinations(self, n_params: int) -> List[np.ndarray]:
+    def _generate_combinations(self, n_params: int, index_filtered: Optional[List[int]] = None) -> List[np.ndarray]:
         """
         Generate all 2^N - 1 combinations (exclude all-zeros).
         
         Args:
-            n_params: Number of parameters
+            n_params: Number of parameters (total if not filtering, filtered count if filtering)
+            index_filtered: If provided, indices to optimize (filtering mode)
             
         Returns:
             List of boolean arrays representing combinations
+            If filtering: arrays have full n_params length with only filtered indices varying
         """
-        # Generate all 2^N combinations
-        all_combos = list(itertools.product([False, True], repeat=n_params))
-        
-        # Exclude all-zeros (first combination)
-        combos = [np.array(combo) for combo in all_combos[1:]]
-        
-        return combos
+        if index_filtered is not None:
+            # FILTERING MODE: Generate combinations for filtered indices only
+            n_filtered = len(index_filtered)
+            if n_filtered == 0:
+                # No indices to optimize, return empty
+                return []
+            
+            # Generate all combinations for filtered indices
+            filtered_combos = list(itertools.product([False, True], repeat=n_filtered))
+            
+            # Expand to full parameter space
+            combos = []
+            for filtered_combo in filtered_combos[1:]:  # Exclude all-zeros
+                # Create full combo (all False initially)
+                full_combo = np.zeros(n_params, dtype=bool)
+                # Set filtered indices according to combo
+                for i, idx in enumerate(index_filtered):
+                    full_combo[idx] = filtered_combo[i]
+                combos.append(full_combo)
+            
+            return combos
+        else:
+            # NORMAL MODE: Generate all 2^N combinations
+            # Generate all 2^N combinations
+            all_combos = list(itertools.product([False, True], repeat=n_params))
+            
+            # Exclude all-zeros (first combination)
+            combos = [np.array(combo) for combo in all_combos[1:]]
+            
+            return combos
     
     def _generate_sampled_combinations(self, 
                                        n_params: int, 
                                        coefficients: np.ndarray,
                                        sample_size: int,
-                                       strategy: str) -> List[np.ndarray]:
+                                       strategy: str,
+                                       index_filtered: Optional[List[int]] = None) -> List[np.ndarray]:
         """
         Generate sampled combinations for large N using intelligent sampling.
         
+        With index filtering: samples from filtered combination space, removing extremes of range.
+        
         Args:
-            n_params: Number of parameters
+            n_params: Number of parameters (filtered count if filtering)
             coefficients: Parameter values (for importance sampling)
             sample_size: Maximum number of combinations to generate
             strategy: Sampling strategy ('importance', 'random', 'progressive')
+            index_filtered: If provided, indices to optimize (filtering mode)
             
         Returns:
             List of boolean arrays representing sampled combinations
         """
-        total_combos = 2**n_params - 1  # Exclude all-zeros
+        if index_filtered is not None:
+            n_filtered = len(index_filtered)
+            if n_filtered == 0:
+                return []
+            
+            total_combos = 2**n_filtered - 1  # Exclude all-zeros
+        else:
+            n_filtered = n_params
+            total_combos = 2**n_params - 1
+        
         actual_sample_size = min(sample_size, total_combos)
         
+        # Remove extremes from sampling range (~20% from each end)
+        if index_filtered is not None and total_combos > actual_sample_size:
+            # Calculate extreme removal
+            remove_fraction = 0.20  # Remove 20% from each end
+            lower_bound = int(total_combos * remove_fraction)
+            upper_bound = int(total_combos * (1 - remove_fraction))
+            
+            # Example: 16383 combos -> sample from 3277-13106 (middle 60%)
+            sampling_range = (lower_bound, upper_bound)
+        else:
+            sampling_range = None
+        
         if strategy == 'importance':
-            return self._importance_sampling(n_params, coefficients, actual_sample_size)
+            return self._importance_sampling(n_params, coefficients, actual_sample_size, index_filtered, sampling_range)
         elif strategy == 'random':
-            return self._random_sampling(n_params, actual_sample_size)
+            return self._random_sampling(n_params, actual_sample_size, index_filtered, sampling_range)
         elif strategy == 'progressive':
-            return self._progressive_sampling(n_params, coefficients, actual_sample_size)
+            return self._progressive_sampling(n_params, coefficients, actual_sample_size, index_filtered, sampling_range)
         else:
             raise ValueError(f"Unknown sampling strategy: {strategy}")
     
     def _importance_sampling(self, 
                             n_params: int, 
                             coefficients: np.ndarray, 
-                            sample_size: int) -> List[np.ndarray]:
+                            sample_size: int,
+                            index_filtered: Optional[List[int]] = None,
+                            sampling_range: Optional[Tuple[int, int]] = None) -> List[np.ndarray]:
         """
         Importance sampling: favor combinations with high-magnitude parameters.
         
@@ -486,55 +704,100 @@ class WeightCombinationSearch:
         - Parameters with larger absolute values are more likely to be selected
         - Ensures diverse coverage of combination space
         - Includes some pure single-parameter combinations
+        - With filtering: only varies filtered indices
         
         Args:
-            n_params: Number of parameters
+            n_params: Number of parameters (total count)
             coefficients: Parameter values
             sample_size: Number of combinations to generate
+            index_filtered: Optional list of indices to optimize (filtering mode)
+            sampling_range: Optional (lower, upper) bounds for combo indices (removes extremes)
             
         Returns:
             List of sampled combinations
         """
         combos = []
         
-        # Calculate importance weights (use absolute values)
-        importance = np.abs(coefficients)
-        if importance.sum() > 0:
-            importance = importance / importance.sum()  # Normalize to probabilities
+        if index_filtered is not None:
+            # FILTERING MODE
+            n_filtered = len(index_filtered)
+            if n_filtered == 0:
+                return []
+            
+            # Calculate importance for filtered coefficients only
+            filtered_coeffs = coefficients[index_filtered]
+            importance = np.abs(filtered_coeffs)
+            if importance.sum() > 0:
+                importance = importance / importance.sum()
+            else:
+                importance = np.ones(n_filtered) / n_filtered
+            
+            # Always include single-parameter combinations for filtered indices
+            for i in range(n_filtered):
+                full_combo = np.zeros(n_params, dtype=bool)
+                full_combo[index_filtered[i]] = True
+                combos.append(full_combo)
+            
+            # Generate random combinations weighted by importance
+            np.random.seed(42)
+            remaining_samples = sample_size - n_filtered
+            
+            for _ in range(remaining_samples):
+                filtered_combo = np.random.rand(n_filtered) < (importance * 2).clip(0, 0.8)
+                
+                if not filtered_combo.any():
+                    filtered_combo[np.argmax(importance)] = True
+                
+                # Expand to full space
+                full_combo = np.zeros(n_params, dtype=bool)
+                for i, idx in enumerate(index_filtered):
+                    full_combo[idx] = filtered_combo[i]
+                
+                combos.append(full_combo)
         else:
-            importance = np.ones(n_params) / n_params  # Uniform if all zeros
-        
-        # Always include single-parameter combinations (pure selections)
-        for i in range(n_params):
-            combo = np.zeros(n_params, dtype=bool)
-            combo[i] = True
-            combos.append(combo)
-        
-        # Generate random combinations weighted by importance
-        np.random.seed(42)  # For reproducibility
-        remaining_samples = sample_size - n_params
-        
-        for _ in range(remaining_samples):
-            # Each parameter selected independently with its importance probability
-            # Modified: increase selection probability to get more "True" values
-            combo = np.random.rand(n_params) < (importance * 2).clip(0, 0.8)
+            # NORMAL MODE
+            # Calculate importance weights (use absolute values)
+            importance = np.abs(coefficients)
+            if importance.sum() > 0:
+                importance = importance / importance.sum()  # Normalize to probabilities
+            else:
+                importance = np.ones(n_params) / n_params  # Uniform if all zeros
             
-            # Ensure at least one True (exclude all-zeros)
-            if not combo.any():
-                # Select the most important parameter
-                combo[np.argmax(importance)] = True
+            # Always include single-parameter combinations (pure selections)
+            for i in range(n_params):
+                combo = np.zeros(n_params, dtype=bool)
+                combo[i] = True
+                combos.append(combo)
             
-            combos.append(combo)
+            # Generate random combinations weighted by importance
+            np.random.seed(42)  # For reproducibility
+            remaining_samples = sample_size - n_params
+            
+            for _ in range(remaining_samples):
+                # Each parameter selected independently with its importance probability
+                # Modified: increase selection probability to get more "True" values
+                combo = np.random.rand(n_params) < (importance * 2).clip(0, 0.8)
+                
+                # Ensure at least one True (exclude all-zeros)
+                if not combo.any():
+                    # Select the most important parameter
+                    combo[np.argmax(importance)] = True
+                
+                combos.append(combo)
         
         return combos
     
-    def _random_sampling(self, n_params: int, sample_size: int) -> List[np.ndarray]:
+    def _random_sampling(self, n_params: int, sample_size: int,
+                        index_filtered: Optional[List[int]] = None,
+                        sampling_range: Optional[Tuple[int, int]] = None) -> List[np.ndarray]:
         """
         Uniform random sampling of combination space.
         
         Args:
             n_params: Number of parameters
             sample_size: Number of combinations to generate
+            index_filtered: Optional list of indices to optimize (filtering mode)
+            sampling_range: Optional (lower, upper) bounds (not used in random, kept for interface)
             
         Returns:
             List of sampled combinations
@@ -542,22 +805,35 @@ class WeightCombinationSearch:
         combos = []
         np.random.seed(42)
         
-        for _ in range(sample_size):
-            # Random combination with ~50% True values
-            combo = np.random.rand(n_params) < 0.5
+        if index_filtered is not None:
+            n_filtered = len(index_filtered)
+            if n_filtered == 0:
+                return []
             
-            # Ensure at least one True
-            if not combo.any():
-                combo[np.random.randint(0, n_params)] = True
-            
-            combos.append(combo)
+            for _ in range(sample_size):
+                filtered_combo = np.random.rand(n_filtered) < 0.5
+                if not filtered_combo.any():
+                    filtered_combo[np.random.randint(0, n_filtered)] = True
+                
+                full_combo = np.zeros(n_params, dtype=bool)
+                for i, idx in enumerate(index_filtered):
+                    full_combo[idx] = filtered_combo[i]
+                combos.append(full_combo)
+        else:
+            for _ in range(sample_size):
+                combo = np.random.rand(n_params) < 0.5
+                if not combo.any():
+                    combo[np.random.randint(0, n_params)] = True
+                combos.append(combo)
         
         return combos
     
     def _progressive_sampling(self, 
                              n_params: int, 
                              coefficients: np.ndarray, 
-                             sample_size: int) -> List[np.ndarray]:
+                             sample_size: int,
+                             index_filtered: Optional[List[int]] = None,
+                             sampling_range: Optional[Tuple[int, int]] = None) -> List[np.ndarray]:
         """
         Progressive sampling: multi-stage refinement strategy.
         
@@ -568,6 +844,8 @@ class WeightCombinationSearch:
             n_params: Number of parameters
             coefficients: Parameter values
             sample_size: Number of combinations to generate
+            index_filtered: Optional list of indices to optimize (filtering mode)
+            sampling_range: Optional (lower, upper) bounds
             
         Returns:
             List of sampled combinations
@@ -576,11 +854,11 @@ class WeightCombinationSearch:
         
         # Stage 1: 40% random exploration
         stage1_size = int(sample_size * 0.4)
-        combos.extend(self._random_sampling(n_params, stage1_size))
+        combos.extend(self._random_sampling(n_params, stage1_size, index_filtered, sampling_range))
         
         # Stage 2: 60% importance-weighted exploitation
         stage2_size = sample_size - stage1_size
-        combos.extend(self._importance_sampling(n_params, coefficients, stage2_size))
+        combos.extend(self._importance_sampling(n_params, coefficients, stage2_size, index_filtered, sampling_range))
         
         return combos
     
