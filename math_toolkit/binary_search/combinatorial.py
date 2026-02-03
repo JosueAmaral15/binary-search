@@ -391,6 +391,7 @@ class WeightCombinationSearch:
         W = np.zeros(n_params)
         WPN = self.initial_wpn
         truth_table = []
+        previous_winner_result = 0.0  # Track previous cycle's winner result for filtering
         
         # Main search loop
         for cycle in range(max_iter):
@@ -399,9 +400,9 @@ class WeightCombinationSearch:
             
             # Calculate current result for filtering decision
             if self.index_filtering:
-                # Calculate result with CURRENT weights only (not all_ones)
-                # BUG FIX: Was using all_ones_combo which gave false accuracy readings
-                current_result = np.sum(coefficients_working * W)
+                # Use previous winner's result for filtering decision
+                # This avoids lag: filtering uses the actual result after weight updates
+                current_result = previous_winner_result
                 
                 # Calculate which indices to optimize this cycle
                 index_filtered = _calculate_index_filtered(target, current_result, n_params)
@@ -571,6 +572,10 @@ class WeightCombinationSearch:
             
             if self.verbose:
                 logger.info(f"  Updated weights: W={W}")
+            
+            # Update previous_winner_result for next cycle's filtering
+            if self.index_filtering:
+                previous_winner_result = winner['result']
             
             # Adjust WPN for next cycle
             old_wpn = WPN
